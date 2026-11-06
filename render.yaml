@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: checketop-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: PATH=$PWD/bin:$PATH python3 bot/yandex_bot.py
+    healthCheckPath: /
+    envVars:
+      - key: BOT_TOKEN
+        sync: false

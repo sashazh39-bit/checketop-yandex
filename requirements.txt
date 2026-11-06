@@ -1,0 +1,2 @@
+python-telegram-bot>=22,<23
+fonttools>=4,<5
