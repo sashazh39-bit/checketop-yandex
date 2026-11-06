@@ -80,6 +80,15 @@ __all__ = ["generate_rocket", "generate_rocket_card", "make_sbp_id", "make_doc_n
 _SBP_POS1_WEIGHTED = "A" * 15 + "B" * 5
 _SBP_POS16_WEIGHTED = "7" * 5 + "4" * 3 + "1" * 3 + "3" * 3 + "K" * 2 + "NB9CT"
 _SBP_ERA_SEGMENTS = ("1004",)
+# Serial era rolls for the whole SBP system, not per bank.  Each row is
+# (from MSK, marker positions 17-18, segment 19-22, tail 23-32), taken
+# from a genuine Rocket receipt of that day.  06.11.2026 donor 47 moved
+# off the 03.11 profile 0B/1004/0011881102 onto 0G/1008/0011890101;
+# keeping the old profile makes the checker reject the operation id.
+_SBP_ERAS = (
+    (datetime(2026, 11, 3, tzinfo=MSK), "0B", ("1004",), "0011881102"),
+    (datetime(2026, 11, 6, tzinfo=MSK), "0G", ("1008",), "0011890101"),
+)
 _SBP_SEGMENTS = (
     "1004", "1004", "1004", "1004",
     "1003", "1003", "1003",
@@ -88,7 +97,7 @@ _SBP_SEGMENTS = (
     "1017", "1012", "1020", "1007", "1001", "1014",
 )
 _SBP_TAILS = ("0011860303", "0011870501", "0011880703")
-_DEFAULT_TEMPLATE = "receipt_rocket_42.pdf"  # freshest genuine donor (03.11.2026)
+_DEFAULT_TEMPLATE = "receipt_rocket_47.pdf"  # freshest genuine donor (06.11.2026)
 
 # Card-transfer layout (donors_card/, genuine donors 43-45 of 03.11.2026):
 # freshest template *with* a recipient-bank block and the (only) template
@@ -334,15 +343,16 @@ def make_sbp_id(op_msk: datetime, donor_sbp: str = "", charset=None) -> str:
         + f"{utc.timetuple().tm_yday:03d}"
         + utc.strftime("%H%M%S")
     )
-    # Current serial era, confirmed 03.11.2026 on fresh genuine Rocket
-    # donors 41/42 (and MTS receipts the same day): marker 0B, segment
-    # 1003/1004/1014, tail 0011881102.  The October profile
-    # (0G/1003/0011880703) is stale for November operations — the
-    # serial era rolls for the whole system, not per bank.  For
-    # operations before the era boundary, inherit the donor's serial.
-    if op_msk >= datetime(2026, 11, 3, tzinfo=MSK):
+    # Serial era of the operation day (see _SBP_ERAS).  Before the first
+    # recorded era the opaque tail is inherited from the donor template.
+    era = None
+    for start, marker, segments, tail in _SBP_ERAS:
+        if op_msk >= start:
+            era = (marker, segments, tail)
+    if era is not None:
+        marker, segments, tail = era
         first = donor_sbp[0] if len(donor_sbp) == 32 else "A"
-        segment = secrets.choice(_SBP_ERA_SEGMENTS)
+        segment = secrets.choice(segments)
         # Prefer serial characters the template's SBP font already
         # carries, so the operation font needs no glyph surgery at all
         # where the era profile allows it.
@@ -355,7 +365,7 @@ def make_sbp_id(op_msk: datetime, donor_sbp: str = "", charset=None) -> str:
         # Cover characters of the donor ID that the fixed segments do
         # not already contain, so the new ID's character set equals the
         # donor's and its font stays byte-identical (no prune/inject).
-        fixed_chars = set(first + stamp + "0" + "0B" + segment + "0011881102")
+        fixed_chars = set(first + stamp + "0" + marker + segment + tail)
         missing = [c for c in set(donor_sbp) if c not in fixed_chars]
         serial = [secrets.choice(digits) for _ in range(3)]
         for slot, char in enumerate(c for c in missing if c.isdigit()):
@@ -369,9 +379,9 @@ def make_sbp_id(op_msk: datetime, donor_sbp: str = "", charset=None) -> str:
                 + "".join(serial)
                 + "0"
                 + (missing_letters[0] if missing_letters else secrets.choice(pos16_pool))
-                + "0B"
+                + marker
                 + segment
-                + "0011881102"
+                + tail
             )
             if candidate != donor_sbp:
                 return candidate
