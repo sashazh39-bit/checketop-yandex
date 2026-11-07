@@ -389,6 +389,59 @@ class StatementHandlersTest(unittest.TestCase):
         self.assertEqual(state, bot.S_OP_DATE_INPUT)
         self.assertTrue(any("вне периода" in m for m in context.bot.messages))
 
+    def test_source_choice_has_manual_button(self):
+        context = fake_context(stmt_data())
+        _text, markup = bot._stmt_prompt(context, bot.S_SOURCE_CHOICE)
+        labels = [button.text for row in markup.inline_keyboard for button in row]
+        self.assertIn("✍️ Настроить", labels)
+        self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
+
+    def test_manual_operation_goes_to_engine_operations(self):
+        context = fake_context(stmt_data(
+            stmt_receipt_paths=[], stmt_receipt_dates=[],
+            stmt_operation_count=1, stmt_source="manual", stmt_ops=[],
+        ))
+        state = run(bot.on_s_source_choice(fake_update(callback="ssource:manual"), context))
+        self.assertEqual(state, bot.S_OPS_EDITOR)
+        state = run(bot.on_s_op_kind(fake_update(callback="sopk:sbp_out"), context))
+        self.assertEqual(state, bot.S_OP_AMOUNT)
+        state = run(bot.on_s_op_amount(fake_update(text="1000"), context))
+        self.assertEqual(state, bot.S_OP_DT_CHOICE)
+        state = run(bot.on_s_op_dt_input(fake_update(text="20.10.2026 12:30"), context))
+        self.assertEqual(state, bot.S_OP_DETAIL)
+        state = run(bot.on_s_op_detail_text(fake_update(text="+7 900 351-70-80"), context))
+        self.assertEqual(state, bot.S_OPS_EDITOR)
+        ops = context.user_data["stmt_ops"]
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(ops[0]["kind"], "sbp_out")
+        self.assertEqual(ops[0]["phone"], "+7 900 351-70-80")
+        self.assertEqual(ops[0]["amount"], "1000.00")
+        state = run(bot.on_s_ops_editor_choice(fake_update(callback="sops:done"), context))
+        self.assertEqual(state, bot.S_SUMMARY)
+        fake = '''
+from pathlib import Path
+def generate_rocket_statement(period_start, period_end, issue_date, holder_name,
+                              account, account_tail, random_account_tail,
+                              opening_balance, operation_count, operation_date,
+                              receipt_paths, phone, fill_random, output_path,
+                              operations=None, **kwargs):
+    assert fill_random is False
+    assert operations and operations[0]["kind"] == "sbp_out"
+    assert operation_count == 1
+    Path(output_path).write_bytes(b"%PDF-1.7 fake-rocket-manual")
+    return output_path
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "rocket_statement.py"
+            engine.write_text(fake, encoding="utf-8")
+            os.environ["ROCKET_STATEMENT_PATH"] = str(engine)
+            try:
+                out = Path(tmp) / "out.pdf"
+                pdf = run(bot.generate_rocket_statement_pdf(dict(context.user_data), out))
+                self.assertTrue(pdf.read_bytes().startswith(b"%PDF-"))
+            finally:
+                os.environ.pop("ROCKET_STATEMENT_PATH", None)
+
 
 # --------------------------------------------------------------------------
 # Вызовы фейковых движков с нормализованными аргументами

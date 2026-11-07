@@ -73,11 +73,18 @@ if str(_HERE) not in sys.path:
 
 from mts_font import FontPool, FontCoverageError, OtfGlyphSource  # noqa: E402
 from mts_receipt import MSK, Receipt, ReceiptError  # noqa: E402
+from mts_card_receipt import CardReceipt  # noqa: E402
+from mts_statement import (  # noqa: E402
+    Statement, StatementError, generate_mts_statement, operation_from_receipt,
+)
 
-__all__ = ["generate_mts", "GlyphCoverageError", "ReceiptError",
-           "make_sbp_id", "make_txcode", "build_pool"]
+__all__ = ["generate_mts", "generate_mts_card", "generate_mts_statement",
+           "GlyphCoverageError", "ReceiptError", "StatementError",
+           "make_sbp_id", "make_txcode", "make_card_txcode",
+           "build_pool", "operation_from_receipt"]
 
 DONORS_DIR = _HERE / "donors"
+CARD_DONORS_DIR = _HERE / "donors_card"
 DEFAULT_OUT_DIR = _HERE / "out"
 
 # --------------------------------------------------------------------------
@@ -208,6 +215,17 @@ def _format_account(value: str) -> str:
     return " ".join(digits[i:i + 5] for i in range(0, 20, 5))
 
 
+def _format_card_mask(value: str) -> str:
+    """Any card spelling -> MTS card-receipt form ``•• 7826`` (U+2022)."""
+    text = str(value or "").strip()
+    if re.fullmatch(r"[•●⋅∙·*]{1,2}\s*\d{4}", text):
+        return f"•• {re.search(r'[0-9]{4}', text).group(0)}"
+    digits = re.sub(r"\D", "", text)
+    if len(digits) >= 4:
+        return f"•• {digits[-4:]}"
+    raise ValueError(f"cannot parse card {value!r}")
+
+
 def _parse_operation_dt(value) -> datetime:
     if isinstance(value, datetime):
         moment = value
@@ -331,15 +349,40 @@ def make_txcode(op_msk: datetime, points: List[Tuple[datetime, int]],
 FONTS_DIR = _HERE / "fonts"
 
 
+def make_card_txcode(op_msk: datetime, donor_tx: str = "") -> str:
+    """12-digit card transaction code.
+
+    Genuine card donors encode UTC year-digit + day-of-year as the first
+    four digits (``6303…`` = 2026-10-30, ``6305…`` = 2026-11-01 UTC of
+    a 02.11 MSK-night operation) plus an 8-digit serial.  The serial is
+    not a monotonic counter across the two donors, so it is re-rolled.
+    """
+    utc = op_msk.astimezone(timezone.utc)
+    prefix = f"{utc.year % 10}{utc.timetuple().tm_yday:03d}"
+    while True:
+        serial = f"{secrets.randbelow(100_000_000):08d}"
+        candidate = prefix + serial
+        if candidate != (donor_tx or ""):
+            return candidate
+
+
 def build_pool(donor_paths: List[Path], *, synthetic: bool = True) -> Dict[str, FontPool]:
     """Glyph pool: genuine donor outlines first, then (with
     ``synthetic``) the uncovered gaps converted from the 2019 CFF
     master in ``fonts/`` (BANK.md §5).  Donor glyphs always win."""
     pool = {"regular": FontPool(), "medium": FontPool()}
     for path in donor_paths:
-        donor = Receipt(path)
+        donor = None
+        try:
+            donor = Receipt(path)
+        except Exception:  # noqa: BLE001
+            try:
+                donor = CardReceipt(path)
+            except Exception:  # noqa: BLE001
+                continue
         for family in pool:
-            pool[family].absorb(donor.subsets[family])
+            if family in donor.subsets:
+                pool[family].absorb(donor.subsets[family])
     if synthetic:
         for family, filename in (("regular", "MTSSans-Regular.otf"),
                                  ("medium", "MTSSans-Medium.otf")):
@@ -347,6 +390,18 @@ def build_pool(donor_paths: List[Path], *, synthetic: bool = True) -> Dict[str, 
             if otf.is_file():
                 pool[family].absorb_synthetic(OtfGlyphSource(otf))
     return pool
+
+
+def _card_donor_paths(donor_path: Optional[Union[str, Path]] = None) -> List[Path]:
+    if donor_path is not None:
+        donor = Path(donor_path).expanduser()
+        if donor.is_dir():
+            return sorted(donor.glob("*.pdf"))
+        return [donor]
+    env = os.environ.get("MTS_CARD_DONOR_PATH")
+    if env:
+        return [Path(env).expanduser()]
+    return sorted(CARD_DONORS_DIR.glob("*.pdf"))
 
 
 def _donor_paths(donor_path: Optional[Union[str, Path]] = None) -> List[Path]:
@@ -491,6 +546,147 @@ def generate_mts(
     receipt.set("fee", printed["fee"])
     receipt.set("txcode", new_tx)
     receipt.set("sbp", new_sbp)
+
+    if output_path is None:
+        DEFAULT_OUT_DIR.mkdir(parents=True, exist_ok=True)
+        output = DEFAULT_OUT_DIR / "Unknown.pdf"
+        n = 2
+        while output.exists():
+            output = DEFAULT_OUT_DIR / f"Unknown {n}.pdf"
+            n += 1
+    else:
+        output = Path(output_path).expanduser()
+    if output.resolve() == receipt.path.resolve():
+        raise ReceiptError("output_path must not overwrite the donor")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    gen = generated_at or datetime.now(timezone.utc)
+    if gen.tzinfo is None:
+        gen = gen.replace(tzinfo=timezone.utc)
+    receipt.save(output, creation_date=gen.strftime("D:%Y%m%d%H%M%SZ"))
+
+    raw = output.read_bytes() if output.is_file() else b""
+    if (not raw.startswith(b"%PDF-")
+            or raw.count(b"startxref") != 1
+            or raw.count(b"%%EOF") != 1
+            or b"/Prev" in raw):
+        output.unlink(missing_ok=True)
+        raise ReceiptError("natural save failed: generated file is not a "
+                           "single-pass PDF")
+    return output
+
+
+def generate_mts_card(
+    amount,
+    operation_dt,
+    recipient_card: str,
+    output_path: Optional[Union[str, Path]] = None,
+    *,
+    sender_card: Optional[str] = None,
+    sender_account: Optional[str] = None,
+    donor_path: Optional[Union[str, Path]] = None,
+    pool: Optional[Dict[str, FontPool]] = None,
+    generated_at: Optional[datetime] = None,
+    txcode: Optional[str] = None,
+) -> Path:
+    """Generate an MTS card-transfer receipt PDF and return its path.
+
+    Layout (genuine donors in ``donors_card/``): no recipient name, no
+    phones, no bank, no SBP id.  The recipient is a card mask
+    ``•• 8429``; the debit side is ``•• 7826`` plus the 20-digit
+    account.  The 12-digit transaction code is re-issued (UTC year
+    digit + day-of-year prefix, see ``make_card_txcode``).
+    """
+    op = _parse_operation_dt(operation_dt)
+    printed_amount = _render_amount(amount)
+    credit = _format_card_mask(recipient_card)
+
+    paths = _card_donor_paths(donor_path)
+    if not paths:
+        raise ReceiptError(
+            "no genuine MTS card donor found (looked in "
+            "banks/mts/donors_card/; pass donor_path=... to use another one)"
+        )
+    glyph_paths = list(paths) + _donor_paths()
+    pool = pool or build_pool(glyph_paths)
+
+    receipts: List[CardReceipt] = []
+    for path in paths:
+        try:
+            receipts.append(CardReceipt(path, pool))
+        except Exception:  # noqa: BLE001 - a stray file is not a donor
+            continue
+    if not receipts:
+        raise ReceiptError("no readable genuine MTS card donor in the pool")
+
+    if op.second == 0 and op.microsecond == 0:
+        # inherit seconds from the freshest card donor's printed clock
+        donor_seconds = 0
+        for receipt in receipts:
+            stamp = receipt.fields.get("datetime", "")
+            m = re.search(r":(\d{2}) \(UTC\+3\)$", stamp)
+            if m:
+                donor_seconds = max(donor_seconds, int(m.group(1)))
+        header = op.replace(second=donor_seconds)
+    else:
+        header = op
+
+    def coverage_ok() -> List[str]:
+        missing = []
+        texts = [
+            credit, printed_amount, "0,00 ₽",
+            header.strftime("%d.%m.%Y %H:%M:%S") + " (UTC+3)",
+        ]
+        if sender_card is not None:
+            texts.append(_format_card_mask(sender_card))
+        if sender_account is not None:
+            texts.append(_format_account(sender_account))
+        for char in set("".join(texts)):
+            if not pool["regular"].has_char(char):
+                missing.append(char)
+        for char in set(printed_amount + "Итого"):
+            if not pool["medium"].has_char(char):
+                missing.append(char)
+        return sorted(set(missing))
+
+    missing = coverage_ok()
+    if missing:
+        raise GlyphCoverageError(
+            f"Буквы вне пула глифов настоящих чеков МТС: {''.join(missing)}. "
+            "Нужен новый настоящий чек МТС по карте с этими буквами; "
+            "положите его PDF в banks/mts/donors_card/."
+        )
+
+    def _card_moment(receipt: CardReceipt) -> datetime:
+        stamp = receipt.fields.get("datetime", "")
+        try:
+            return _parse_operation_dt(stamp)
+        except ValueError:
+            return datetime.min.replace(tzinfo=MSK)
+
+    receipts.sort(key=_card_moment, reverse=True)
+    receipt = receipts[0]
+    donor = dict(receipt.fields)
+
+    debit = (_format_card_mask(sender_card) if sender_card is not None
+             else donor.get("debit_card", ""))
+    account = (_format_account(sender_account) if sender_account is not None
+               else donor.get("account", ""))
+    if not re.fullmatch(r"•• \d{4}", debit or ""):
+        raise ReceiptError(f"donor {receipt.path.name} has no usable debit card")
+    if not re.fullmatch(r"\d{5}( \d{5}){3}", account or ""):
+        raise ReceiptError(f"donor {receipt.path.name} has no usable account")
+
+    new_tx = txcode or make_card_txcode(header, donor.get("txcode", ""))
+
+    receipt.set("datetime", header.strftime("%d.%m.%Y %H:%M:%S") + " (UTC+3)")
+    receipt.set("debit_card", debit)
+    receipt.set("account", account)
+    receipt.set("credit_card", credit)
+    receipt.set("amount", printed_amount)
+    receipt.set("total", printed_amount)
+    receipt.set("fee", "0,00 ₽")
+    receipt.set("txcode", new_tx)
 
     if output_path is None:
         DEFAULT_OUT_DIR.mkdir(parents=True, exist_ok=True)

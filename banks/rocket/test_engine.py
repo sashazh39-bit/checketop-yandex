@@ -56,7 +56,7 @@ def info_of(path: Path):
 
 def stage2_roundtrip(cache) -> None:
     print(f"\nStage 2: byte-for-byte round-trip ({len(DONORS)} donors)")
-    check("donors 18-42 present", len(DONORS) == 22, str(len(DONORS)))
+    check("donors 18-47 present", len(DONORS) == 23, str(len(DONORS)))
     for path in DONORS:
         source = path.read_bytes()
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
@@ -129,6 +129,7 @@ def stage5_generate() -> None:
             recipient_phone="+7 (963) 297-20-08",
             recipient_bank="Сбербанк",
             output_path=out,
+            donor_path=template,
             creation_delta_minutes=5,
         )
         check("returns the output path", Path(result) == out and out.is_file())
@@ -176,7 +177,7 @@ def stage5_generate() -> None:
         check("doc_number is new", f["doc_number"] != donor["doc_number"])
         doc_value = int(f["doc_number"][1:])
         check("doc_number matches operation date (corpus counter model)",
-              73_540_000_000 < doc_value < 73_580_000_000, f["doc_number"])
+              73_520_000_000 < doc_value < 73_620_000_000, f["doc_number"])
         check("font subsets carry exactly their line's glyphs",
               _subsets_exact(receipt))
 

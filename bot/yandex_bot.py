@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""Telegram-бот checketop — Яндекс Банк и Рокетбанк.
+"""Telegram-бот checketop — Яндекс, Рокет, МТС, ВТБ, ВБ Банк.
 
 Бот ведёт пошаговый диалог, собирает данные перевода/выписки и вызывает
-готовые движки: Яндекса ``banks/yandex/engine.py`` (``generate_yandex``)
-и Рокета ``banks/rocket/engine.py`` (``generate_rocket`` /
-``generate_rocket_card``) + ``banks/rocket/rocket_statement.py``
-(``generate_rocket_statement``, ``operation_from_receipt``).
-Никакой логики работы с PDF в боте нет: бот только валидирует ввод,
-вызывает движок и отправляет пользователю полученный файл.
+готовые движки. Логики работы с PDF в боте нет: бот только валидирует
+ввод, вызывает ``generate_*`` и отправляет пользователю полученный файл.
 
 Запуск (токен — только из окружения, см. PROJECT.md)::
 
@@ -189,6 +185,62 @@ Y_DOC_STMT_CB = "ydoc:stmt"
     M_SUMMARY,
     M_EDIT_SELECT,
 ) = range(75, 88)
+M_MENU = 88
+(
+    MC_RECIPIENT_CARD,
+    MC_AMOUNT,
+    MC_SENDER_CARD_CHOICE,
+    MC_SENDER_CARD_INPUT,
+    MC_ACCOUNT_CHOICE,
+    MC_ACCOUNT_INPUT,
+    MC_TIME_CHOICE,
+    MC_TIME_INPUT,
+    MC_SUMMARY,
+    MC_EDIT_SELECT,
+) = range(89, 99)
+V_MENU = 99
+(
+    V_RECIPIENT_NAME,
+    V_RECIPIENT_PHONE,
+    V_RECIPIENT_BANK,
+    V_RECIPIENT_BANK_CUSTOM,
+    V_RECIPIENT_CARD,
+    V_AMOUNT,
+    V_SENDER_NAME,
+    V_SENDER_PHONE,
+    V_SENDER_ACCOUNT_CHOICE,
+    V_SENDER_ACCOUNT_INPUT,
+    V_PAYER_CARD_CHOICE,
+    V_PAYER_CARD_INPUT,
+    V_MESSAGE_CHOICE,
+    V_MESSAGE_INPUT,
+    V_TIME_CHOICE,
+    V_TIME_INPUT,
+    V_SUMMARY,
+    V_EDIT_SELECT,
+) = range(100, 118)
+W_MENU = 118
+(
+    W_RECIPIENT_NAME,
+    W_RECIPIENT_PHONE,
+    W_RECIPIENT_BANK,
+    W_RECIPIENT_BANK_CUSTOM,
+    W_AMOUNT,
+    W_TIME_CHOICE,
+    W_TIME_INPUT,
+    W_SUMMARY,
+    W_EDIT_SELECT,
+) = range(119, 128)
+S_CARD = 128
+(
+    S_OPS_EDITOR,
+    S_OP_KIND,
+    S_OP_AMOUNT,
+    S_OP_DT_CHOICE,
+    S_OP_DT_INPUT,
+    S_OP_DETAIL,
+    S_OP_DELETE,
+) = range(129, 136)
 M_MEM_RECIPIENT_CB = "mmem:recipient"
 M_GENERATE_CB = "mgen:generate"
 M_EDIT_CB = "mgen:edit"
@@ -204,6 +256,38 @@ MTS_BANK_OPTIONS = (
     ("rshb", "Россельхозбанк"),
     ("yandex", "Яндекс"),
 )
+VTB_BANK_OPTIONS = (
+    ("sber", "Сбербанк"),
+    ("tbank", "Т-Банк"),
+    ("alfa", "Альфа-Банк"),
+    ("psb", "ПСБ"),
+    ("wb", "Wildberries (Вайлдберриз Банк)"),
+    ("rocket", "Рокетбанк"),
+    ("ozon", "Озон Банк"),
+    ("otp", "ОТП Банк"),
+)
+WB_BANK_OPTIONS = (
+    ("sber", "Сбербанк"),
+    ("tbank", "Т-Банк"),
+    ("vtb", "ВТБ"),
+    ("alfa", "Альфа-Банк"),
+    ("psb", "ПСБ"),
+    ("rocket", "Рокетбанк"),
+)
+STMT_ALLOWED_COUNTS = {
+    "rocket": tuple(range(0, 11)),
+    "mts": (0, 2, 3, 5, 20),
+    "vtb": (0, 5, 15),
+}
+STMT_KIND_LABELS = {
+    "sbp_out": "Исходящий СБП",
+    "sbp_in": "Входящий СБП",
+    "card": "Перевод с карты",
+    "topup": "Пополнение",
+    "posted": "Операция",
+    "internal": "Приход",
+    "expense": "Расход",
+}
 YS_GENERATE_CB = "ysgen:generate"
 YS_EDIT_CB = "ysgen:edit"
 YS_MEM_HOLDER_CB = "ysmem:holder"
@@ -269,11 +353,30 @@ YANDEX_BANK_OPTIONS = (
 
 ROCKET_MENU_CB = "bank:rocket"
 MTS_CB = "bank:mts"
+VTB_CB = "bank:vtb"
+WB_CB = "bank:wb"
 MAIN_MENU_CB = "menu:main"
 BACK_CB = "nav:back"
 ROCKET_SBP_CB = "rocket:sbp"
 ROCKET_CARD_CB = "rocket:card"
 ROCKET_STMT_CB = "rocket:stmt"
+MTS_SBP_CB = "mts:sbp"
+MTS_CARD_CB = "mts:card"
+MTS_STMT_CB = "mts:stmt"
+VTB_SBP_CB = "vtb:sbp"
+VTB_CARD_CB = "vtb:card"
+VTB_STMT_CB = "vtb:stmt"
+WB_SBP_CB = "wb:sbp"
+MC_GENERATE_CB = "mcgen:generate"
+MC_EDIT_CB = "mcgen:edit"
+MC_MEM_CARD_CB = "mcmem:card"
+V_GENERATE_CB = "vgen:generate"
+V_EDIT_CB = "vgen:edit"
+V_MEM_RECIPIENT_CB = "vmem:recipient"
+V_MEM_SENDER_CB = "vmem:sender"
+W_GENERATE_CB = "wgen:generate"
+W_EDIT_CB = "wgen:edit"
+W_MEM_RECIPIENT_CB = "wmem:recipient"
 MEM_RECIPIENT_CB = "rmem:recipient"
 MEM_SENDER_CB = "rmem:sender"
 R_GENERATE_CB = "rgen:generate"
@@ -865,6 +968,69 @@ def parse_operation_count(text: str) -> int:
     return value
 
 
+def stmt_bank_of(data: dict) -> str:
+    """Банк текущей выписки: rocket / mts / vtb."""
+    scenario = data.get("scenario") or ""
+    if scenario == "mts_statement":
+        return "mts"
+    if scenario == "vtb_statement":
+        return "vtb"
+    return "rocket"
+
+
+def stmt_allowed_counts(bank: str) -> tuple:
+    return STMT_ALLOWED_COUNTS.get(bank, STMT_ALLOWED_COUNTS["rocket"])
+
+
+def parse_stmt_operation_count(text: str, bank: str) -> int:
+    """Число платежей выписки — только допустимая раскладка банка."""
+    allowed = stmt_allowed_counts(bank)
+    cleaned = (text or "").strip()
+    if not re.fullmatch(r"\d{1,2}", cleaned):
+        pretty = ", ".join(str(n) for n in allowed)
+        raise ValueError(f"Введите одно из чисел: {pretty}")
+    value = int(cleaned)
+    if value not in allowed:
+        pretty = ", ".join(str(n) for n in allowed)
+        raise ValueError(f"Для этой выписки можно только {pretty} платежей.")
+    return value
+
+
+def parse_mts_card(text: str) -> str:
+    """Карта МТС: 16 цифр, маска или последние 4 — движок напечатает ``•• 8429``."""
+    raw = (text or "").strip()
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 4:
+        return digits
+    if len(digits) == 16:
+        return digits
+    if ("*" in raw or "•" in raw) and len(digits) >= 4:
+        return digits[-4:] if len(digits) != 16 else digits
+    raise ValueError(
+        "Не понял карту. Введите 16 цифр, маску или последние 4, например: 8429"
+    )
+
+
+def parse_vtb_payee_card(text: str) -> str:
+    """Карта получателя ВТБ: 16 цифр или маска ``2200 27** **** 4432``."""
+    raw = (text or "").strip()
+    digits = re.sub(r"\D", "", raw)
+    if "*" in raw:
+        groups = re.findall(r"\d+", raw)
+        if len(groups) >= 2 and len(groups[0]) == 4 and len(groups[-1]) == 4:
+            return raw
+    if len(digits) == 16:
+        return digits
+    raise ValueError(
+        "Не понял карту. Введите 16 цифр или маску, например: 2200 27** **** 4432"
+    )
+
+
+def parse_wb_amount(text: str) -> str:
+    """Сумма ВБ — только целые рубли, как у Рокета."""
+    return parse_rocket_amount(text)
+
+
 def parse_account_tail(text: str) -> str:
     digits = re.sub(r"\D", "", text or "")
     if len(digits) != 5:
@@ -880,6 +1046,11 @@ def statement_account_display(data: dict) -> str:
         return masked_account(str(data["stmt_account"]))
     if data.get("stmt_account_tail"):
         return f"…{data['stmt_account_tail']}"
+    bank = stmt_bank_of(data)
+    if bank == "vtb":
+        return "счёт донора"
+    if bank == "mts":
+        return "счёт шаблона"
     return f"…{ROCKET_DEFAULT_ACCOUNT_TAIL}"
 
 
@@ -887,6 +1058,12 @@ def statement_sources_text(data: dict) -> str:
     """Человекочитаемый источник платежей выписки для сводки/подписи."""
     total = int(data.get("stmt_operation_count") or 0)
     uploaded = len(data.get("stmt_receipt_paths") or [])
+    if data.get("stmt_source") == "manual":
+        ops = list(data.get("stmt_ops") or [])
+        n = len(ops)
+        if n == 0:
+            return "0 платежей: настроены вручную"
+        return f"{n} платежей: настроены вручную"
     if total == 0:
         return "0 платежей"
     if uploaded and data.get("stmt_fill_random") and uploaded < total:
@@ -1349,36 +1526,63 @@ async def generate_rocket_card_pdf(data: dict, output_path: Path) -> Path:
     return _ensure_pdf_result(result, output_path, "generate_rocket_card")
 
 
+def _statement_engine_kwargs(data: dict, output_path: Path, bank: str) -> dict:
+    """Общие kwargs выписки + operations= только в режиме «Настроить»."""
+    kwargs = {
+        "period_start": data["stmt_period_start"],
+        "period_end": data["stmt_period_end"],
+        "holder_name": data["stmt_holder_name"],
+        "opening_balance": data.get("stmt_opening_balance"),
+        "output_path": str(output_path),
+        "fill_random": bool(data.get("stmt_fill_random", True)),
+        "operation_count": int(data.get("stmt_operation_count") or 0),
+        "receipt_paths": list(data.get("stmt_receipt_paths") or []),
+    }
+    if data.get("stmt_issue_date") is not None:
+        kwargs["issue_date"] = data["stmt_issue_date"]
+    if bank == "rocket":
+        kwargs["account"] = (
+            data.get("stmt_account") if data.get("stmt_account_mode") == "full" else None
+        )
+        kwargs["account_tail"] = (
+            data.get("stmt_account_tail") if data.get("stmt_account_mode") == "tail" else None
+        )
+        kwargs["random_account_tail"] = False
+        kwargs["operation_date"] = data.get("stmt_operation_date")
+        kwargs["phone"] = data.get("stmt_phone")
+    elif bank == "mts":
+        kwargs["account"] = data.get("stmt_account")
+        kwargs["card"] = data.get("stmt_card")
+    else:
+        kwargs["account"] = data.get("stmt_account")
+    if data.get("stmt_source") == "manual":
+        ops = list(data.get("stmt_ops") or [])
+        kwargs["operations"] = ops
+        kwargs["fill_random"] = False
+        kwargs["operation_count"] = len(ops)
+        kwargs["receipt_paths"] = []
+    return kwargs
+
+
 async def generate_rocket_statement_pdf(data: dict, output_path: Path) -> Path:
     """Выписка Рокета: только вызов ``generate_rocket_statement``."""
     generate = load_generate_rocket_statement()
-    account = data.get("stmt_account") if data.get("stmt_account_mode") == "full" else None
-    account_tail = (
-        data.get("stmt_account_tail") if data.get("stmt_account_mode") == "tail" else None
-    )
-    result = await asyncio.to_thread(
-        generate,
-        period_start=data["stmt_period_start"],
-        period_end=data["stmt_period_end"],
-        issue_date=data["stmt_issue_date"],
-        holder_name=data["stmt_holder_name"],
-        account=account,
-        account_tail=account_tail,
-        random_account_tail=False,
-        opening_balance=data["stmt_opening_balance"],
-        operation_count=int(data["stmt_operation_count"]),
-        operation_date=data.get("stmt_operation_date"),
-        receipt_paths=list(data.get("stmt_receipt_paths") or []),
-        phone=data["stmt_phone"],
-        fill_random=bool(data.get("stmt_fill_random", True)),
-        output_path=str(output_path),
-    )
+    kwargs = _statement_engine_kwargs(data, output_path, bank="rocket")
+    result = await asyncio.to_thread(generate, **kwargs)
     return _ensure_pdf_result(result, output_path, "generate_rocket_statement")
 
 
-def import_receipt_operation(path) -> dict:
+def import_receipt_operation(path, bank: str = "rocket") -> dict:
     """Чек PDF -> операция выписки, строго через движок выписки."""
-    func = load_operation_from_receipt()
+    if bank == "mts":
+        module = load_mts_engine()
+        func = getattr(module, "operation_from_receipt", None)
+        if not callable(func):
+            raise AttributeError("В движке МТС нет operation_from_receipt(...)")
+    elif bank == "vtb":
+        func = load_vtb_operation_from_receipt()
+    else:
+        func = load_operation_from_receipt()
     result = func(str(path))
     if not isinstance(result, dict):
         raise TypeError("operation_from_receipt вернул не словарь операции")
@@ -1460,6 +1664,35 @@ async def generate_mts_pdf(data: dict, output_path: Path) -> Path:
     return _ensure_pdf_result(result, output_path, "generate_mts")
 
 
+async def generate_mts_card_pdf(data: dict, output_path: Path) -> Path:
+    """Чек МТС по карте: только вызов ``generate_mts_card``."""
+    module = load_mts_engine()
+    generate = getattr(module, "generate_mts_card", None)
+    if not callable(generate):
+        raise AttributeError("В движке МТС нет generate_mts_card(...)")
+    result = await asyncio.to_thread(
+        generate,
+        amount=data["amount"],
+        operation_dt=data["operation_dt"],
+        recipient_card=data["recipient_card"],
+        output_path=str(output_path),
+        sender_card=data.get("sender_card"),
+        sender_account=data.get("sender_account"),
+    )
+    return _ensure_pdf_result(result, output_path, "generate_mts_card")
+
+
+async def generate_mts_statement_pdf(data: dict, output_path: Path) -> Path:
+    """Выписка МТС: только вызов ``generate_mts_statement``."""
+    module = load_mts_engine()
+    generate = getattr(module, "generate_mts_statement", None)
+    if not callable(generate):
+        raise AttributeError("В движке МТС нет generate_mts_statement(...)")
+    kwargs = _statement_engine_kwargs(data, output_path, bank="mts")
+    result = await asyncio.to_thread(generate, **kwargs)
+    return _ensure_pdf_result(result, output_path, "generate_mts_statement")
+
+
 def mts_user_error(error: BaseException) -> str:
     if error.__class__.__name__ == "GlyphCoverageError":
         return (
@@ -1472,6 +1705,180 @@ def mts_user_error(error: BaseException) -> str:
 def mts_receipt_filename(data: dict) -> str:
     """Имя как у настоящей выгрузки МТС: ``Unknown.pdf``."""
     return "Unknown.pdf"
+
+
+def mts_statement_filename(data: dict) -> str:
+    start = data.get("stmt_period_start")
+    end = data.get("stmt_period_end")
+    count = int(data.get("stmt_operation_count") or 0)
+    if start and end:
+        return f"mts_statement_{start:%Y%m%d}_{end:%Y%m%d}_{count}ops.pdf"
+    return "mts_statement.pdf"
+
+
+DEFAULT_VTB_ENGINE_PATH = REPO_ROOT / "banks" / "vtb" / "engine.py"
+DEFAULT_VTB_STATEMENT_PATH = REPO_ROOT / "banks" / "vtb" / "vtb_statement.py"
+_VTB_ENGINE_CACHE: dict = {"path": None, "module": None}
+
+
+def vtb_engine_path() -> Path:
+    override = os.environ.get("VTB_ENGINE_PATH")
+    return Path(override).expanduser() if override else DEFAULT_VTB_ENGINE_PATH
+
+
+def vtb_statement_path() -> Path:
+    override = os.environ.get("VTB_STATEMENT_PATH")
+    return Path(override).expanduser() if override else DEFAULT_VTB_STATEMENT_PATH
+
+
+def load_vtb_engine():
+    path = vtb_engine_path()
+    if _VTB_ENGINE_CACHE["path"] == path and _VTB_ENGINE_CACHE["module"] is not None:
+        return _VTB_ENGINE_CACHE["module"]
+    if not path.is_file():
+        raise FileNotFoundError(f"Движок ВТБ не найден: {path}")
+    spec = importlib.util.spec_from_file_location("checketop_vtb_engine", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Не удалось загрузить движок ВТБ из {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["checketop_vtb_engine"] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "generate_vtb", None)):
+        raise AttributeError(f"В {path} нет функции generate_vtb(...)")
+    _VTB_ENGINE_CACHE["path"] = path
+    _VTB_ENGINE_CACHE["module"] = module
+    return module
+
+
+def load_vtb_operation_from_receipt() -> Callable[..., Any]:
+    module = load_vtb_engine()
+    func = getattr(module, "operation_from_receipt", None)
+    if callable(func):
+        return func
+    return _load_engine_func(
+        vtb_statement_path(), "checketop_vtb_statement",
+        "operation_from_receipt", "Движок выписки ВТБ",
+    )
+
+
+async def generate_vtb_pdf(data: dict, output_path: Path) -> Path:
+    module = load_vtb_engine()
+    result = await asyncio.to_thread(
+        module.generate_vtb,
+        amount=data["amount"],
+        operation_dt=data["operation_dt"],
+        sender_name=data["sender_name"],
+        sender_phone=data.get("sender_phone") or "+7 900 000-00-00",
+        recipient_name=data["recipient_name"],
+        recipient_phone=data["recipient_phone"],
+        recipient_bank=data["recipient_bank"],
+        output_path=str(output_path),
+        sender_account=data.get("sender_account"),
+        message=data.get("vtb_message"),
+    )
+    return _ensure_pdf_result(result, output_path, "generate_vtb")
+
+
+async def generate_vtb_card_pdf(data: dict, output_path: Path) -> Path:
+    module = load_vtb_engine()
+    generate = getattr(module, "generate_vtb_card", None)
+    if not callable(generate):
+        raise AttributeError("В движке ВТБ нет generate_vtb_card(...)")
+    result = await asyncio.to_thread(
+        generate,
+        amount=data["amount"],
+        operation_dt=data["operation_dt"],
+        sender_name=data["sender_name"],
+        recipient_card=data["recipient_card"],
+        recipient_bank=data.get("recipient_bank"),
+        output_path=str(output_path),
+        sender_account=data.get("sender_account"),
+        payer_card=data.get("payer_card"),
+    )
+    return _ensure_pdf_result(result, output_path, "generate_vtb_card")
+
+
+async def generate_vtb_statement_pdf(data: dict, output_path: Path) -> Path:
+    module = load_vtb_engine()
+    generate = getattr(module, "generate_vtb_statement", None)
+    if not callable(generate):
+        generate = _load_engine_func(
+            vtb_statement_path(), "checketop_vtb_statement_gen",
+            "generate_vtb_statement", "Движок выписки ВТБ",
+        )
+    kwargs = _statement_engine_kwargs(data, output_path, bank="vtb")
+    result = await asyncio.to_thread(generate, **kwargs)
+    return _ensure_pdf_result(result, output_path, "generate_vtb_statement")
+
+
+def vtb_receipt_filename(data: dict) -> str:
+    moment = data.get("operation_dt") or rocket_current_time()
+    kind = "card" if data.get("scenario") == "vtb_card" else "sbp"
+    return f"vtb_{kind}_{moment:%Y%m%d_%H%M}.pdf"
+
+
+def vtb_statement_filename(data: dict) -> str:
+    start = data.get("stmt_period_start")
+    end = data.get("stmt_period_end")
+    count = int(data.get("stmt_operation_count") or 0)
+    if start and end:
+        return f"vtb_statement_{start:%Y%m%d}_{end:%Y%m%d}_{count}ops.pdf"
+    return "vtb_statement.pdf"
+
+
+def vtb_user_error(error: BaseException) -> str:
+    return f"Не получилось: {_short_error(error)}"
+
+
+DEFAULT_WB_ENGINE_PATH = REPO_ROOT / "banks" / "wb" / "engine.py"
+_WB_ENGINE_CACHE: dict = {"path": None, "module": None}
+
+
+def wb_engine_path() -> Path:
+    override = os.environ.get("WB_ENGINE_PATH")
+    return Path(override).expanduser() if override else DEFAULT_WB_ENGINE_PATH
+
+
+def load_wb_engine():
+    path = wb_engine_path()
+    if _WB_ENGINE_CACHE["path"] == path and _WB_ENGINE_CACHE["module"] is not None:
+        return _WB_ENGINE_CACHE["module"]
+    if not path.is_file():
+        raise FileNotFoundError(f"Движок ВБ Банка не найден: {path}")
+    spec = importlib.util.spec_from_file_location("checketop_wb_engine", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Не удалось загрузить движок ВБ Банка из {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["checketop_wb_engine"] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "generate_wb", None)):
+        raise AttributeError(f"В {path} нет функции generate_wb(...)")
+    _WB_ENGINE_CACHE["path"] = path
+    _WB_ENGINE_CACHE["module"] = module
+    return module
+
+
+async def generate_wb_pdf(data: dict, output_path: Path) -> Path:
+    """Чек ВБ: только вызов ``generate_wb``. sender_* не передаём."""
+    module = load_wb_engine()
+    result = await asyncio.to_thread(
+        module.generate_wb,
+        amount=data["amount"],
+        operation_dt=data["operation_dt"],
+        recipient_name=data["recipient_name"],
+        recipient_phone=data["recipient_phone"],
+        recipient_bank=data["recipient_bank"],
+        output_path=str(output_path),
+    )
+    return _ensure_pdf_result(result, output_path, "generate_wb")
+
+
+def wb_user_error(error: BaseException) -> str:
+    return f"Не получилось: {_short_error(error)}"
+
+
+def wb_receipt_filename(data: dict) -> str:
+    return f"{uuid.uuid4()}.pdf"
 
 
 def rocket_receipt_filename(data: dict) -> str:
@@ -1745,10 +2152,16 @@ async def _invalid(update: Update, error: ValueError, state: int, context=None) 
             builders = [lambda: _prompt(state, context)]
         elif scenario in ("rocket_sbp", "rocket_card"):
             builders = [lambda: _rocket_prompt(context, state)]
-        elif scenario == "rocket_statement":
+        elif scenario in ("rocket_statement", "mts_statement", "vtb_statement"):
             builders = [lambda: _stmt_prompt(context, state)]
         elif scenario == "mts":
             builders = [lambda: _mts_prompt(context, state)]
+        elif scenario == "mts_card":
+            builders = [lambda: _mts_card_prompt(context, state)]
+        elif scenario in ("vtb_sbp", "vtb_card"):
+            builders = [lambda: _vtb_prompt(context, state)]
+        elif scenario == "wb":
+            builders = [lambda: _wb_prompt(context, state)]
         for build in builders:
             await _delete_user_message(update, context)
             try:
@@ -1824,6 +2237,8 @@ def _main_menu_markup() -> InlineKeyboardMarkup:
                 _btn("🟡 Яндекс чек", YANDEX_CB),
                 _btn("🚀 Рокетбанк", ROCKET_MENU_CB),
                 _btn("🔴 МТС", MTS_CB),
+                _btn("🔵 ВТБ", VTB_CB),
+                _btn("🟣 ВБ Банк", WB_CB),
             ]
         )
     )
@@ -1838,6 +2253,43 @@ def _rocket_menu_markup() -> InlineKeyboardMarkup:
                 _btn("📄 Выписка", ROCKET_STMT_CB),
                 _btn("🏠 Главное меню", MAIN_MENU_CB),
                 _btn("❌ Отмена", CANCEL_CB),
+            ]
+        )
+    )
+
+
+def _mts_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        _rows(
+            [
+                _btn("💸 Перевод по СБП", MTS_SBP_CB),
+                _btn("💳 Перевод по карте", MTS_CARD_CB),
+                _btn("📄 Выписка", MTS_STMT_CB),
+                _btn("🏠 Главное меню", MAIN_MENU_CB),
+            ]
+        )
+    )
+
+
+def _vtb_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        _rows(
+            [
+                _btn("💸 Перевод по СБП", VTB_SBP_CB),
+                _btn("💳 Перевод по карте", VTB_CARD_CB),
+                _btn("📄 Выписка", VTB_STMT_CB),
+                _btn("🏠 Главное меню", MAIN_MENU_CB),
+            ]
+        )
+    )
+
+
+def _wb_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        _rows(
+            [
+                _btn("💸 Чек СБП", WB_SBP_CB),
+                _btn("🏠 Главное меню", MAIN_MENU_CB),
             ]
         )
     )
@@ -2075,6 +2527,186 @@ def _rocket_edit_fields(scenario: Optional[str]):
     return [(key, labels[key], ROCKET_EDIT_STATES[key]) for key in keys]
 
 
+def _stmt_op_moment(op: dict):
+    value = op.get("datetime") or op.get("date") or op.get("dt")
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=MSK)
+    if value:
+        try:
+            return parse_ystmt_op_datetime(
+                str(value), date(1900, 1, 1), date(2100, 1, 1)
+            )
+        except ValueError:
+            return str(value)
+    return ""
+
+
+def _stmt_ops_list_text(data: dict) -> str:
+    ops = list(data.get("stmt_ops") or [])
+    if not ops:
+        return "Операций пока нет."
+    lines = []
+    for index, op in enumerate(ops, 1):
+        moment = _stmt_op_moment(op)
+        when = moment.strftime("%d.%m.%Y %H:%M") if isinstance(moment, datetime) else str(moment)
+        kind = STMT_KIND_LABELS.get(op.get("kind"), op.get("kind") or "")
+        amount = op.get("amount", "")
+        extra = (
+            op.get("description")
+            or op.get("counterparty")
+            or op.get("phone")
+            or op.get("card")
+            or op.get("recipient")
+            or ""
+        )
+        piece = f"{index}. {when} · {kind} · {amount}"
+        if extra:
+            piece += f" · {extra}"
+        lines.append(piece)
+    return "\n".join(lines)
+
+
+def _stmt_kind_buttons(bank: str) -> list:
+    if bank == "rocket":
+        return [
+            _btn("💸 Исходящий СБП", "sopk:sbp_out"),
+            _btn("💰 Входящий СБП", "sopk:sbp_in"),
+            _btn("💳 Перевод с карты", "sopk:card"),
+            _btn("⬇️ Пополнение", "sopk:topup"),
+        ]
+    if bank == "mts":
+        return [
+            _btn("💸 Исходящий СБП", "sopk:sbp_out"),
+            _btn("💰 Входящий СБП", "sopk:sbp_in"),
+            _btn("💳 Перевод с карты", "sopk:card"),
+            _btn("✍️ Своё описание", "sopk:posted"),
+        ]
+    return [
+        _btn("💸 Исходящий СБП", "sopk:sbp_out"),
+        _btn("💳 Перевод на карту", "sopk:card"),
+        _btn("💰 Приход", "sopk:internal"),
+        _btn("📉 Расход", "sopk:expense"),
+    ]
+
+
+def _stmt_ops_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
+    data = context.user_data
+    nav = _nav_row()
+    bank = stmt_bank_of(data)
+    allowed = stmt_allowed_counts(bank)
+    pretty = ", ".join(str(n) for n in allowed)
+    if state == S_OPS_EDITOR:
+        ops = list(data.get("stmt_ops") or [])
+        buttons = [_btn("➕ Добавить операцию", "sops:add")]
+        if ops:
+            buttons.append(_btn("🗑 Удалить операцию", "sops:delete"))
+            buttons.append(_btn("✅ Готово к сводке", "sops:done"))
+        else:
+            buttons.append(_btn("📭 Без операций", "sops:none"))
+        hint = (
+            f"Раскладка этой выписки принимает только {pretty} операций. "
+            "Не только random и не только PDF-чек — каждое поле задаёте сами."
+        )
+        if bank == "rocket":
+            hint += " У Рокета все операции должны быть в один календарный день."
+        return (
+            f"✍️ <b>Операции выписки</b>\n{html.escape(hint)}\n\n"
+            f"{html.escape(_stmt_ops_list_text(data))}",
+            InlineKeyboardMarkup(_rows(buttons) + [nav]),
+        )
+    if state == S_OP_KIND:
+        return (
+            "🔖 <b>Вид операции</b> — что печатает этот банк:",
+            InlineKeyboardMarkup(_rows(_stmt_kind_buttons(bank)) + [nav]),
+        )
+    if state == S_OP_AMOUNT:
+        return (
+            "💰 <b>Сумма операции.</b> Копейки можно.\n"
+            "Нажмите, чтобы скопировать: <code>1 500,00</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == S_OP_DT_CHOICE:
+        start, end = data.get("stmt_period_start"), data.get("stmt_period_end")
+        span = f"{start:%d.%m.%Y}–{end:%d.%m.%Y}" if start and end else ""
+        rows = [
+            [_btn("🕒 Сейчас", "sopdt:now"), _btn("✍️ Ввести", "sopdt:input")],
+            nav,
+        ]
+        return (
+            f"🕒 <b>Дата и время операции</b> внутри периода {html.escape(span)}.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == S_OP_DT_INPUT:
+        start = data.get("stmt_period_start")
+        example = start.strftime("%d.%m.%Y 12:40") if start else "04.11.2026 12:40"
+        return (
+            "🕒 Введите дату и время.\n"
+            f"Нажмите, чтобы скопировать: <code>{html.escape(example)}</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == S_OP_DETAIL:
+        draft = data.get("stmt_op_draft") or {}
+        kind = draft.get("kind")
+        if bank == "rocket" and kind in ("sbp_out", "sbp_in"):
+            rows = []
+            phone = data.get("stmt_phone")
+            if phone:
+                rows.append([_btn(f"↩️ Телефон выписки ({phone})", "sopd:stmt_phone")])
+            rows.append(nav)
+            return (
+                "📱 <b>Телефон</b> в операции СБП.\n"
+                "Нажмите, чтобы скопировать: <code>+7 900 351-70-80</code>",
+                InlineKeyboardMarkup(rows),
+            )
+        if bank == "rocket" and kind == "card":
+            return (
+                "💳 <b>Карта</b> операции. 16 цифр или маска.\n"
+                "Нажмите, чтобы скопировать: <code>2200 **** **** 9515</code>",
+                InlineKeyboardMarkup([nav]),
+            )
+        if bank == "rocket" and kind == "topup":
+            rows = [[_btn("↩️ Пропустить", "sopd:skip")], nav]
+            return (
+                "💳 Последние 4 цифры карты пополнения (необязательно).\n"
+                "Нажмите, чтобы скопировать: <code>4432</code>",
+                InlineKeyboardMarkup(rows),
+            )
+        if bank == "mts" and kind in ("sbp_out", "sbp_in"):
+            return (
+                "👤 <b>Получатель / отправитель</b> (ФИО). На чеке будет "
+                "«Имя Отчество Ф. Переводы».\n"
+                "Нажмите, чтобы скопировать: <code>Петрова Анна Ивановна</code>",
+                InlineKeyboardMarkup([nav]),
+            )
+        if bank == "mts" and kind == "posted":
+            return (
+                "📝 <b>Описание</b> одной строкой, как в выписке МТС.\n"
+                "Нажмите, чтобы скопировать: <code>Перевод СБП Переводы</code>",
+                InlineKeyboardMarkup([nav]),
+            )
+        if bank == "vtb" and kind == "card":
+            return (
+                "📝 <b>Описание</b> (необязательно; пусто — как у донора карты).\n"
+                "Нажмите, чтобы скопировать: <code>Денежный перевод. VTB.</code>",
+                InlineKeyboardMarkup([[_btn("↩️ Как у донора", "sopd:skip")], nav]),
+            )
+        return (
+            "📝 <b>Описание / контрагент</b> одной строкой.\n"
+            "Нажмите, чтобы скопировать: <code>Переводы через СБП.</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == S_OP_DELETE:
+        ops = list(data.get("stmt_ops") or [])
+        buttons = [_btn(f"{i + 1}", f"sopdel:{i}") for i in range(len(ops))]
+        return (
+            "🗑 Какую операцию удалить?",
+            InlineKeyboardMarkup(_rows(buttons) + [nav]),
+        )
+    raise ValueError(f"no statement-ops prompt for state {state}")
+
+
 def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
     data = context.user_data
     nav = _nav_row()
@@ -2108,6 +2740,31 @@ def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
             InlineKeyboardMarkup([nav]),
         )
     if state == S_ACCOUNT_CHOICE:
+        bank = stmt_bank_of(data)
+        if bank == "vtb":
+            rows = _rows(
+                [
+                    _btn("↩️ Оставить донорский", "sacc:keep"),
+                    _btn("✍️ Ввести целиком", "sacc:full"),
+                ]
+            ) + [nav]
+            return (
+                "💳 <b>Счёт выписки.</b> По умолчанию — донорский, ключ "
+                "не пересчитывается. Свой — ровно 20 цифр.",
+                InlineKeyboardMarkup(rows),
+            )
+        if bank == "mts":
+            rows = _rows(
+                [
+                    _btn("↩️ Оставить текущий", "sacc:keep"),
+                    _btn("✍️ Ввести целиком", "sacc:full"),
+                ]
+            ) + [nav]
+            return (
+                "💳 <b>Счёт выписки.</b> «Оставить текущий» — счёт шаблона. "
+                "Свой — 20 цифр.",
+                InlineKeyboardMarkup(rows),
+            )
         rows = _rows(
             [
                 _btn("↩️ Оставить текущий", "sacc:keep"),
@@ -2119,6 +2776,14 @@ def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
         return (
             "💳 <b>Счёт выписки.</b> Текущий заканчивается на "
             f"{masked_account(None)}; ключ при смене пересчитает движок.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == S_CARD:
+        rows = [[_btn("↩️ Оставить как в шаблоне", "scard:skip")], nav]
+        return (
+            "💳 <b>Карта в шапке выписки</b> (необязательно). 16 цифр, "
+            "маска или последние 4.\n"
+            "Нажмите, чтобы скопировать: <code>2203831234568429</code>",
             InlineKeyboardMarkup(rows),
         )
     if state == S_ACCOUNT_TAIL_INPUT:
@@ -2136,14 +2801,18 @@ def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
             InlineKeyboardMarkup([nav]),
         )
     if state == S_OP_COUNT_CHOICE:
-        rows = _rows(
-            [
-                _btn("0", "scount:0"), _btn("1", "scount:1"), _btn("3", "scount:3"),
-                _btn("5", "scount:5"), _btn("6", "scount:6"),
-                _btn("✍️ Другое (0–10)", "scount:custom"),
-            ]
-        ) + [nav]
-        return ("🔢 <b>Сколько платежей</b> в выписке (0–10)?", InlineKeyboardMarkup(rows))
+        bank = stmt_bank_of(data)
+        allowed = stmt_allowed_counts(bank)
+        buttons = [_btn(str(n), f"scount:{n}") for n in allowed]
+        if bank == "rocket":
+            buttons.append(_btn("✍️ Другое (0–10)", "scount:custom"))
+        rows = _rows(buttons) + [nav]
+        pretty = ", ".join(str(n) for n in allowed)
+        extra = " Всегда 2 страницы." if bank == "mts" else ""
+        return (
+            f"🔢 <b>Сколько платежей</b> в выписке ({pretty})?{extra}",
+            InlineKeyboardMarkup(rows),
+        )
     if state == S_OP_COUNT_INPUT:
         return (
             "🔢 Введите число платежей от 0 до 10.\n"
@@ -2156,15 +2825,18 @@ def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
                 _btn("📎 Загрузить чек PDF", "ssource:upload"),
                 _btn("🎲 Случайно по настоящим", "ssource:random"),
                 _btn("🧩 Смешанно", "ssource:mixed"),
+                _btn("✍️ Настроить", "ssource:manual"),
             ]
         ) + [nav]
         return ("🧾 <b>Откуда платежи?</b>", InlineKeyboardMarkup(rows))
     if state == S_UPLOAD:
         uploaded = len(data.get("stmt_receipt_paths") or [])
         total = int(data.get("stmt_operation_count") or 0)
+        bank = stmt_bank_of(data)
+        bank_name = {"mts": "МТС", "vtb": "ВТБ"}.get(bank, "Рокета")
         rows = [[_btn("✅ Готово", S_UPLOADS_DONE_CB)], nav]
         return (
-            f"📎 Загружайте чеки Рокета <b>PDF по одному</b>.\n"
+            f"📎 Загружайте чеки {html.escape(bank_name)} <b>PDF по одному</b>.\n"
             f"Загружено чеков: <b>{uploaded}</b> из {total}.",
             InlineKeyboardMarkup(rows),
         )
@@ -2206,6 +2878,11 @@ def _stmt_prompt(context: ContextTypes.DEFAULT_TYPE, state: int):
             if start else "📅 Введите дату в периоде.",
             InlineKeyboardMarkup([nav]),
         )
+    if state in (
+        S_OPS_EDITOR, S_OP_KIND, S_OP_AMOUNT, S_OP_DT_CHOICE,
+        S_OP_DT_INPUT, S_OP_DETAIL, S_OP_DELETE,
+    ):
+        return _stmt_ops_prompt(context, state)
     raise ValueError(f"no statement prompt for state {state}")
 
 
@@ -2217,17 +2894,26 @@ async def _send_stmt_prompt(update, context, state: int, prefix: str = "") -> in
 
 
 def _stmt_summary_text(data: dict) -> str:
+    bank = stmt_bank_of(data)
     lines = [
         "<b>Проверь данные выписки</b>",
         "",
         f"📅 Период: <b>{data['stmt_period_start']:%d.%m.%Y}–{data['stmt_period_end']:%d.%m.%Y}</b>",
         f"📅 Дата выдачи: <b>{data['stmt_issue_date']:%d.%m.%Y}</b>",
         f"👤 Держатель: <b>{html.escape(str(data.get('stmt_holder_name', '')))}</b>",
-        f"📱 Телефон: <b>{html.escape(str(data.get('stmt_phone', '')))}</b>",
-        f"💳 Счёт: <b>{statement_account_display(data)}</b>",
-        f"💰 Входящий остаток: <b>{format_money_display(data.get('stmt_opening_balance', '0'))}</b>",
-        f"🔢 Платежи: <b>{html.escape(statement_sources_text(data))}</b>",
     ]
+    if bank == "rocket":
+        lines.append(f"📱 Телефон: <b>{html.escape(str(data.get('stmt_phone', '')))}</b>")
+    lines.append(f"💳 Счёт: <b>{statement_account_display(data)}</b>")
+    if bank == "mts" and data.get("stmt_card"):
+        lines.append(f"💳 Карта: <b>{html.escape(str(data.get('stmt_card')))}</b>")
+    lines.append(
+        f"💰 Входящий остаток: <b>{format_money_display(data.get('stmt_opening_balance', '0'))}</b>"
+    )
+    lines.append(f"🔢 Платежи: <b>{html.escape(statement_sources_text(data))}</b>")
+    if data.get("stmt_source") == "manual":
+        lines.append("")
+        lines.append(_stmt_ops_list_text(data))
     if data.get("stmt_fill_random") and int(data.get("stmt_operation_count") or 0) > len(data.get("stmt_receipt_paths") or []):
         day = data.get("stmt_operation_date")
         if day:
@@ -2259,26 +2945,44 @@ STATEMENT_EDIT_STATES = {
     "stmt_holder": S_HOLDER,
     "stmt_phone": S_PHONE,
     "stmt_account": S_ACCOUNT_CHOICE,
+    "stmt_card": S_CARD,
     "stmt_opening": S_OPENING,
     "stmt_op_count": S_OP_COUNT_CHOICE,
+    "stmt_ops": S_OPS_EDITOR,
 }
 
 
-def _statement_edit_fields():
+def _statement_edit_fields(data: Optional[dict] = None):
+    bank = stmt_bank_of(data or {})
     labels = {
         "stmt_period": "📅 Период", "stmt_issue": "📅 Дата выдачи",
-        "stmt_holder": "👤 Держатель", "stmt_phone": "📱 Телефон",
+        "stmt_holder": "👤 Держатель",
         "stmt_account": "💳 Счёт", "stmt_opening": "💰 Входящий остаток",
         "stmt_op_count": "🔢 Число платежей",
     }
+    if bank == "rocket":
+        labels = {
+            "stmt_period": "📅 Период", "stmt_issue": "📅 Дата выдачи",
+            "stmt_holder": "👤 Держатель", "stmt_phone": "📱 Телефон",
+            "stmt_account": "💳 Счёт", "stmt_opening": "💰 Входящий остаток",
+            "stmt_op_count": "🔢 Число платежей",
+        }
+    elif bank == "mts":
+        labels["stmt_card"] = "💳 Карта"
+    if (data or {}).get("stmt_source") == "manual":
+        labels["stmt_ops"] = "✍️ Операции"
+        labels.pop("stmt_op_count", None)
     return [(key, labels[key], STATEMENT_EDIT_STATES[key]) for key in labels]
 
 
 def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
     scenario = data.get("scenario")
+    if current in (M_MENU, V_MENU, W_MENU, R_MENU, BANK_SELECT):
+        return None
     if scenario == "mts":
         mapping = {
-            M_RECIPIENT_NAME: None,
+            M_MENU: None,
+            M_RECIPIENT_NAME: M_MENU,
             M_RECIPIENT_PHONE: M_RECIPIENT_NAME,
             M_RECIPIENT_BANK: M_RECIPIENT_PHONE,
             M_RECIPIENT_BANK_CUSTOM: M_RECIPIENT_BANK,
@@ -2292,6 +2996,62 @@ def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
             M_SUMMARY: M_TIME_CHOICE,
             M_EDIT_SELECT: M_SUMMARY,
         }
+        return mapping.get(current)
+    if scenario == "mts_card":
+        mapping = {
+            M_MENU: None,
+            MC_RECIPIENT_CARD: M_MENU,
+            MC_AMOUNT: MC_RECIPIENT_CARD,
+            MC_SENDER_CARD_CHOICE: MC_AMOUNT,
+            MC_SENDER_CARD_INPUT: MC_SENDER_CARD_CHOICE,
+            MC_ACCOUNT_CHOICE: MC_SENDER_CARD_CHOICE,
+            MC_ACCOUNT_INPUT: MC_ACCOUNT_CHOICE,
+            MC_TIME_CHOICE: MC_ACCOUNT_CHOICE,
+            MC_TIME_INPUT: MC_TIME_CHOICE,
+            MC_SUMMARY: MC_TIME_CHOICE,
+            MC_EDIT_SELECT: MC_SUMMARY,
+        }
+        return mapping.get(current)
+    if scenario == "wb":
+        mapping = {
+            W_MENU: None,
+            W_RECIPIENT_NAME: W_MENU,
+            W_RECIPIENT_PHONE: W_RECIPIENT_NAME,
+            W_RECIPIENT_BANK: W_RECIPIENT_PHONE,
+            W_RECIPIENT_BANK_CUSTOM: W_RECIPIENT_BANK,
+            W_AMOUNT: W_RECIPIENT_BANK,
+            W_TIME_CHOICE: W_AMOUNT,
+            W_TIME_INPUT: W_TIME_CHOICE,
+            W_SUMMARY: W_TIME_CHOICE,
+            W_EDIT_SELECT: W_SUMMARY,
+        }
+        return mapping.get(current)
+    if scenario in ("vtb_sbp", "vtb_card"):
+        mapping = {
+            V_MENU: None,
+            V_RECIPIENT_NAME: V_MENU,
+            V_RECIPIENT_PHONE: V_RECIPIENT_NAME,
+            V_RECIPIENT_CARD: V_MENU,
+            V_RECIPIENT_BANK: V_RECIPIENT_PHONE,
+            V_RECIPIENT_BANK_CUSTOM: V_RECIPIENT_BANK,
+            V_AMOUNT: V_RECIPIENT_BANK,
+            V_SENDER_NAME: V_AMOUNT,
+            V_SENDER_PHONE: V_SENDER_NAME,
+            V_SENDER_ACCOUNT_CHOICE: V_SENDER_PHONE,
+            V_SENDER_ACCOUNT_INPUT: V_SENDER_ACCOUNT_CHOICE,
+            V_PAYER_CARD_CHOICE: V_SENDER_ACCOUNT_CHOICE,
+            V_PAYER_CARD_INPUT: V_PAYER_CARD_CHOICE,
+            V_MESSAGE_CHOICE: V_SENDER_ACCOUNT_CHOICE,
+            V_MESSAGE_INPUT: V_MESSAGE_CHOICE,
+            V_TIME_CHOICE: V_MESSAGE_CHOICE,
+            V_TIME_INPUT: V_TIME_CHOICE,
+            V_SUMMARY: V_TIME_CHOICE,
+            V_EDIT_SELECT: V_SUMMARY,
+        }
+        if scenario == "vtb_card":
+            mapping[V_RECIPIENT_BANK] = V_RECIPIENT_CARD
+            mapping[V_SENDER_ACCOUNT_CHOICE] = V_SENDER_NAME
+            mapping[V_TIME_CHOICE] = V_PAYER_CARD_CHOICE
         return mapping.get(current)
     if scenario == "yandex_statement":
         mapping = {
@@ -2345,33 +3105,60 @@ def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
         return mapping.get(current)
     stmt_states = {
         S_PERIOD, S_ISSUE_CHOICE, S_ISSUE_INPUT, S_HOLDER, S_PHONE,
-        S_ACCOUNT_CHOICE, S_ACCOUNT_TAIL_INPUT, S_ACCOUNT_FULL_INPUT,
+        S_ACCOUNT_CHOICE, S_ACCOUNT_TAIL_INPUT, S_ACCOUNT_FULL_INPUT, S_CARD,
         S_OPENING, S_OP_COUNT_CHOICE, S_OP_COUNT_INPUT, S_SOURCE_CHOICE,
         S_UPLOAD, S_UPLOAD_PENDING, S_SHORTAGE, S_OP_DAY_CHOICE,
         S_OP_DATE_INPUT, S_SUMMARY, S_EDIT_SELECT,
+        S_OPS_EDITOR, S_OP_KIND, S_OP_AMOUNT, S_OP_DT_CHOICE,
+        S_OP_DT_INPUT, S_OP_DETAIL, S_OP_DELETE,
     }
+    stmt_scenarios = ("rocket_statement", "mts_statement", "vtb_statement")
     if current is None:
-        return R_MENU if scenario in ("rocket_sbp", "rocket_card", "rocket_statement") else None
+        if scenario in ("rocket_sbp", "rocket_card", "rocket_statement"):
+            return R_MENU
+        if scenario in ("mts", "mts_card", "mts_statement"):
+            return M_MENU
+        if scenario in ("vtb_sbp", "vtb_card", "vtb_statement"):
+            return V_MENU
+        if scenario == "wb":
+            return W_MENU
+        return None
     if current in (R_EDIT_SELECT,):
         return R_SUMMARY
     if current in (S_EDIT_SELECT,):
         return S_SUMMARY
-    if current in stmt_states or scenario == "rocket_statement":
+    if current in stmt_states or scenario in stmt_scenarios:
+        menu = {
+            "mts_statement": M_MENU,
+            "vtb_statement": V_MENU,
+        }.get(scenario, R_MENU)
         mapping = {
-            S_PERIOD: R_MENU, S_ISSUE_CHOICE: S_PERIOD, S_ISSUE_INPUT: S_ISSUE_CHOICE,
+            S_PERIOD: menu, S_ISSUE_CHOICE: S_PERIOD, S_ISSUE_INPUT: S_ISSUE_CHOICE,
             S_HOLDER: S_ISSUE_CHOICE, S_PHONE: S_HOLDER, S_ACCOUNT_CHOICE: S_PHONE,
             S_ACCOUNT_TAIL_INPUT: S_ACCOUNT_CHOICE, S_ACCOUNT_FULL_INPUT: S_ACCOUNT_CHOICE,
+            S_CARD: S_ACCOUNT_CHOICE,
             S_OPENING: S_ACCOUNT_CHOICE, S_OP_COUNT_CHOICE: S_OPENING,
             S_OP_COUNT_INPUT: S_OP_COUNT_CHOICE, S_SOURCE_CHOICE: S_OP_COUNT_CHOICE,
             S_UPLOAD: S_SOURCE_CHOICE, S_UPLOAD_PENDING: S_UPLOAD,
             S_SHORTAGE: S_UPLOAD, S_OP_DAY_CHOICE: S_SOURCE_CHOICE,
             S_OP_DATE_INPUT: S_OP_DAY_CHOICE, S_SUMMARY: S_OP_COUNT_CHOICE,
+            S_OPS_EDITOR: S_SOURCE_CHOICE, S_OP_KIND: S_OPS_EDITOR,
+            S_OP_AMOUNT: S_OP_KIND, S_OP_DT_CHOICE: S_OP_AMOUNT,
+            S_OP_DT_INPUT: S_OP_DT_CHOICE, S_OP_DETAIL: S_OP_DT_CHOICE,
+            S_OP_DELETE: S_OPS_EDITOR,
         }
+        if stmt_bank_of(data) != "rocket":
+            mapping[S_ACCOUNT_CHOICE] = S_HOLDER
+        if stmt_bank_of(data) == "mts":
+            mapping[S_OPENING] = S_CARD
+            mapping[S_OP_COUNT_CHOICE] = S_OPENING
+        if current == S_SUMMARY and data.get("stmt_source") == "manual":
+            return S_OPS_EDITOR
         if current == S_SUMMARY and data.get("stmt_receipt_paths"):
             return S_UPLOAD
         if current == S_SUMMARY and int(data.get("stmt_operation_count") or 0) > 0:
             return S_OP_DAY_CHOICE if data.get("stmt_fill_random") else S_SOURCE_CHOICE
-        return mapping.get(current, R_MENU)
+        return mapping.get(current, menu)
     mapping = {
         R_MENU: None, R_RECIPIENT_NAME: R_MENU, R_RECIPIENT_PHONE: R_RECIPIENT_NAME,
         R_RECIPIENT_CARD: R_MENU,
@@ -4301,7 +5088,15 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             return await _send_ystmt_summary(update, context)
         if data.get("scenario") == "mts":
             return await _send_mts_summary(update, context)
-        if current in STATEMENT_EDIT_STATES.values() or data.get("scenario") == "rocket_statement":
+        if data.get("scenario") == "mts_card":
+            return await _send_mts_card_summary(update, context)
+        if data.get("scenario") in ("vtb_sbp", "vtb_card"):
+            return await _send_vtb_summary(update, context)
+        if data.get("scenario") == "wb":
+            return await _send_wb_summary(update, context)
+        if current in STATEMENT_EDIT_STATES.values() or data.get("scenario") in (
+            "rocket_statement", "mts_statement", "vtb_statement",
+        ):
             return await _send_stmt_summary(update, context)
         return await _send_rocket_summary(update, context)
     if data.get("scenario") == "yandex_statement":
@@ -4332,9 +5127,41 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if target is None:
             _clear_draft(context)
             return await _send_main_menu(update, context)
+        if target == M_MENU:
+            return await _send_mts_menu(update, context)
         if target == M_SUMMARY:
             return await _send_mts_summary(update, context)
         return await _send_mts_prompt(update, context, target)
+    if data.get("scenario") == "mts_card":
+        target = _back_target(data, current)
+        if target is None:
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        if target == M_MENU:
+            return await _send_mts_menu(update, context)
+        if target == MC_SUMMARY:
+            return await _send_mts_card_summary(update, context)
+        return await _send_mts_card_prompt(update, context, target)
+    if data.get("scenario") in ("vtb_sbp", "vtb_card"):
+        target = _back_target(data, current)
+        if target is None:
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        if target == V_MENU:
+            return await _send_vtb_menu(update, context)
+        if target == V_SUMMARY:
+            return await _send_vtb_summary(update, context)
+        return await _send_vtb_prompt(update, context, target)
+    if data.get("scenario") == "wb":
+        target = _back_target(data, current)
+        if target is None:
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        if target == W_MENU:
+            return await _send_wb_menu(update, context)
+        if target == W_SUMMARY:
+            return await _send_wb_summary(update, context)
+        return await _send_wb_prompt(update, context, target)
     target = _back_target(data, current)
     if target is None:
         _cleanup_stmt_files(dict(context.user_data))
@@ -4342,11 +5169,26 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return await _send_main_menu(update, context)
     if target == R_MENU:
         return await _send_rocket_menu(update, context)
+    if target == M_MENU:
+        return await _send_mts_menu(update, context)
+    if target == V_MENU:
+        return await _send_vtb_menu(update, context)
+    if target == W_MENU:
+        return await _send_wb_menu(update, context)
     if target == R_SUMMARY:
         return await _send_rocket_summary(update, context)
     if target == S_SUMMARY:
         return await _send_stmt_summary(update, context)
-    if target >= S_PERIOD:
+    stmt_states = {
+        S_PERIOD, S_ISSUE_CHOICE, S_ISSUE_INPUT, S_HOLDER, S_PHONE,
+        S_ACCOUNT_CHOICE, S_ACCOUNT_TAIL_INPUT, S_ACCOUNT_FULL_INPUT, S_CARD,
+        S_OPENING, S_OP_COUNT_CHOICE, S_OP_COUNT_INPUT, S_SOURCE_CHOICE,
+        S_UPLOAD, S_UPLOAD_PENDING, S_SHORTAGE, S_OP_DAY_CHOICE,
+        S_OP_DATE_INPUT, S_EDIT_SELECT,
+        S_OPS_EDITOR, S_OP_KIND, S_OP_AMOUNT, S_OP_DT_CHOICE,
+        S_OP_DT_INPUT, S_OP_DETAIL, S_OP_DELETE,
+    }
+    if target in stmt_states:
         return await _send_stmt_prompt(update, context, target)
     return await _send_rocket_prompt(update, context, target)
 
@@ -4676,7 +5518,8 @@ async def on_s_holder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
     except ValueError as error:
         return await _invalid(update, error, S_HOLDER, context)
-    return await _stmt_after_field(update, context, S_PHONE)
+    next_state = S_PHONE if stmt_bank_of(context.user_data) == "rocket" else S_ACCOUNT_CHOICE
+    return await _stmt_after_field(update, context, next_state)
 
 
 async def on_s_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -4690,11 +5533,16 @@ async def on_s_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def on_s_account_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     slug = update.callback_query.data.split(":", 1)[1]
+    bank = stmt_bank_of(context.user_data)
     if slug == "tail":
+        if bank != "rocket":
+            return await _send_stmt_prompt(update, context, S_ACCOUNT_CHOICE)
         return await _send_stmt_prompt(update, context, S_ACCOUNT_TAIL_INPUT)
     if slug == "full":
         return await _send_stmt_prompt(update, context, S_ACCOUNT_FULL_INPUT)
     if slug == "random":
+        if bank != "rocket":
+            return await _send_stmt_prompt(update, context, S_ACCOUNT_CHOICE)
         context.user_data["stmt_account_mode"] = "tail"
         context.user_data["stmt_account_tail"] = "".join(
             secrets.choice("0123456789") for _ in range(5)
@@ -4704,7 +5552,8 @@ async def on_s_account_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data["stmt_account_mode"] = "keep"
         context.user_data["stmt_account"] = None
         context.user_data["stmt_account_tail"] = None
-    return await _stmt_after_field(update, context, S_OPENING)
+    next_state = S_CARD if stmt_bank_of(context.user_data) == "mts" else S_OPENING
+    return await _stmt_after_field(update, context, next_state)
 
 
 async def on_s_account_tail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -4716,7 +5565,8 @@ async def on_s_account_tail(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return await _invalid(update, error, S_ACCOUNT_TAIL_INPUT, context)
     context.user_data["stmt_account_mode"] = "tail"
     context.user_data["stmt_account"] = None
-    return await _stmt_after_field(update, context, S_OPENING)
+    next_state = S_CARD if stmt_bank_of(context.user_data) == "mts" else S_OPENING
+    return await _stmt_after_field(update, context, next_state)
 
 
 async def on_s_account_full(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -4728,6 +5578,21 @@ async def on_s_account_full(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return await _invalid(update, error, S_ACCOUNT_FULL_INPUT, context)
     context.user_data["stmt_account_mode"] = "full"
     context.user_data["stmt_account_tail"] = None
+    next_state = S_CARD if stmt_bank_of(context.user_data) == "mts" else S_OPENING
+    return await _stmt_after_field(update, context, next_state)
+
+
+async def on_s_card_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.callback_query.answer()
+    context.user_data["stmt_card"] = None
+    return await _stmt_after_field(update, context, S_OPENING)
+
+
+async def on_s_card_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        context.user_data["stmt_card"] = parse_mts_card(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, S_CARD, context)
     return await _stmt_after_field(update, context, S_OPENING)
 
 
@@ -4776,15 +5641,27 @@ async def on_s_op_count_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.callback_query.answer()
     slug = update.callback_query.data.split(":", 1)[1]
     if slug == "custom":
+        if stmt_bank_of(context.user_data) != "rocket":
+            return await _send_stmt_prompt(update, context, S_OP_COUNT_CHOICE)
         return await _send_stmt_prompt(update, context, S_OP_COUNT_INPUT)
-    context.user_data["stmt_operation_count"] = int(slug)
+    value = int(slug)
+    allowed = stmt_allowed_counts(stmt_bank_of(context.user_data))
+    if value not in allowed:
+        return await _send_stmt_prompt(
+            update, context, S_OP_COUNT_CHOICE,
+            prefix=(
+                f"⚠️ Для этой выписки можно только "
+                f"{', '.join(str(n) for n in allowed)} платежей.\n\n"
+            ),
+        )
+    context.user_data["stmt_operation_count"] = value
     return await _s_after_count_set(update, context)
 
 
 async def on_s_op_count_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        context.user_data["stmt_operation_count"] = parse_operation_count(
-            update.effective_message.text
+        context.user_data["stmt_operation_count"] = parse_stmt_operation_count(
+            update.effective_message.text, stmt_bank_of(context.user_data)
         )
     except ValueError as error:
         return await _invalid(update, error, S_OP_COUNT_INPUT, context)
@@ -4796,14 +5673,24 @@ async def on_s_source_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     slug = update.callback_query.data.split(":", 1)[1]
     data = context.user_data
     data["stmt_source"] = slug
+    if slug == "manual":
+        if data.get("stmt_receipt_paths"):
+            _cleanup_stmt_files(dict(data))
+            data["stmt_receipt_paths"] = []
+            data["stmt_receipt_dates"] = []
+        data["stmt_fill_random"] = False
+        data.setdefault("stmt_ops", [])
+        return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
     if slug == "random":
         if data.get("stmt_receipt_paths"):
             _cleanup_stmt_files(dict(data))
             data["stmt_receipt_paths"] = []
             data["stmt_receipt_dates"] = []
         data["stmt_fill_random"] = True
+        data["stmt_ops"] = []
         return await _send_stmt_prompt(update, context, S_OP_DAY_CHOICE)
     data["stmt_fill_random"] = slug == "mixed"
+    data["stmt_ops"] = []
     return await _send_stmt_prompt(update, context, S_UPLOAD)
 
 
@@ -4836,7 +5723,9 @@ async def on_s_upload_document(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         telegram_file = await context.bot.get_file(document.file_id)
         await telegram_file.download_to_drive(custom_path=str(local_path))
-        operation = await asyncio.to_thread(import_receipt_operation, local_path)
+        operation = await asyncio.to_thread(
+            import_receipt_operation, local_path, stmt_bank_of(data)
+        )
         receipt_date = receipt_operation_date(operation)
     except Exception as error:  # не чек Рокета / битый PDF — не считаем его
         logger.exception("Rocket receipt import for statement failed")
@@ -4982,7 +5871,7 @@ async def on_s_summary_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     buttons = _rows(
         [
             _btn(label, f"sedit:{key}")
-            for key, label, _state in _statement_edit_fields()
+            for key, label, _state in _statement_edit_fields(context.user_data)
         ]
     )
     buttons.append(_nav_row())
@@ -5016,15 +5905,45 @@ async def on_s_generate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await update.callback_query.answer()
     chat_id = update.effective_chat.id
     user = update.effective_user
+    bank = stmt_bank_of(context.user_data)
+    if context.user_data.get("stmt_source") == "manual":
+        ops = list(context.user_data.get("stmt_ops") or [])
+        allowed = stmt_allowed_counts(bank)
+        if len(ops) not in allowed:
+            pretty = ", ".join(str(n) for n in allowed)
+            return await _send_stmt_summary(
+                update, context,
+                prefix=(
+                    f"⚠️ Сейчас операций: {len(ops)}. Для этой выписки "
+                    f"нужно ровно {pretty}. Добавьте или удалите операции.\n\n"
+                ),
+            )
+        context.user_data["stmt_operation_count"] = len(ops)
+        context.user_data["stmt_fill_random"] = False
     data = dict(context.user_data)
     await _send_tracked_message(update, context, "⏳ Формирую выписку…")
-    tmp_dir = Path(tempfile.mkdtemp(prefix="checketop_rocket_stmt_out_"))
-    filename = rocket_statement_filename(data)
+    prefix = {
+        "mts": "checketop_mts_stmt_out_",
+        "vtb": "checketop_vtb_stmt_out_",
+    }.get(bank, "checketop_rocket_stmt_out_")
+    tmp_dir = Path(tempfile.mkdtemp(prefix=prefix))
+    if bank == "mts":
+        filename = mts_statement_filename(data)
+        generate = generate_mts_statement_pdf
+        again_cb = MTS_STMT_CB
+    elif bank == "vtb":
+        filename = vtb_statement_filename(data)
+        generate = generate_vtb_statement_pdf
+        again_cb = VTB_STMT_CB
+    else:
+        filename = rocket_statement_filename(data)
+        generate = generate_rocket_statement_pdf
+        again_cb = ROCKET_STMT_CB
     output_path = tmp_dir / filename
     try:
-        pdf_path = await generate_rocket_statement_pdf(data, output_path)
+        pdf_path = await generate(data, output_path)
         markup = InlineKeyboardMarkup(
-            [[_btn("🔁 Новая выписка", ROCKET_STMT_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+            [[_btn("🔁 Новая выписка", again_cb)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
         )
         await _delete_chat_message(
             context, chat_id, context.user_data.pop("_bot_prompt_id", None)
@@ -5036,8 +5955,8 @@ async def on_s_generate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             )
     except Exception as error:  # движок упал — бот жив, возврат в сводку
         logger.exception(
-            "Rocket statement generation failed (user_id=%s, chat_id=%s)",
-            getattr(user, "id", "?"), chat_id,
+            "Statement generation failed (user_id=%s, chat_id=%s, bank=%s)",
+            getattr(user, "id", "?"), chat_id, bank,
         )
         return await _send_stmt_summary(
             update, context,
@@ -5235,7 +6154,27 @@ MTS_EDIT_FIELDS = {
 }
 
 
+async def _send_mts_menu(update, context) -> int:
+    context.user_data["current_step"] = M_MENU
+    await _send_tracked_message(
+        update, context,
+        "🔴 <b>МТС Банк</b>. Что сформировать?",
+        reply_markup=_mts_menu_markup(),
+    )
+    return M_MENU
+
+
 async def on_mts_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    if context.user_data.get("current_step") in (None, BANK_SELECT):
+        _cleanup_stmt_files(dict(context.user_data))
+        _cleanup_yandex_template_files(dict(context.user_data))
+        _clear_draft(context)
+    return await _send_mts_menu(update, context)
+
+
+async def on_mts_sbp_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if update.callback_query is not None:
         await update.callback_query.answer()
     _cleanup_stmt_files(dict(context.user_data))
@@ -5405,7 +6344,7 @@ async def on_mts_generate(update, context) -> int:
             context, chat_id, context.user_data.pop("_bot_prompt_id", None)
         )
         markup = InlineKeyboardMarkup(
-            [[_btn("🔁 Ещё чек", MTS_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+            [[_btn("🔁 Ещё чек", MTS_SBP_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
         )
         with pdf_path.open("rb") as handle:
             await context.bot.send_document(
@@ -5430,6 +6369,1409 @@ async def on_mts_generate(update, context) -> int:
 
 
 # ---------------------------------------------------------------------------
+# МТС: чек по карте и выписка
+# ---------------------------------------------------------------------------
+
+
+def _save_mts_card_memory(context) -> None:
+    data = context.user_data
+    if data.get("recipient_card"):
+        data["mem_mts_card"] = {
+            "recipient_card": data.get("recipient_card"),
+            "sender_card": data.get("sender_card"),
+            "sender_account": data.get("sender_account"),
+        }
+
+
+def _mts_card_prompt(context, state: int):
+    data = context.user_data
+    nav = _nav_row()
+    if state == MC_RECIPIENT_CARD:
+        rows = []
+        mem = data.get("mem_mts_card") or {}
+        if mem.get("recipient_card"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['recipient_card']})",
+                MC_MEM_CARD_CB,
+            )])
+        rows.append(nav)
+        return (
+            "💳 <b>Карта зачисления.</b> 16 цифр, маска или последние 4.\n"
+            "Нажмите, чтобы скопировать: <code>8429</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == MC_AMOUNT:
+        return (
+            "💰 <b>Сумма.</b> Копейки можно. Комиссия в чеке всегда 0,00 ₽.\n"
+            "Нажмите, чтобы скопировать: <code>225,00</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == MC_SENDER_CARD_CHOICE:
+        rows = [
+            [_btn("↩️ Пропустить", "mccard:skip"), _btn("✍️ Ввести карту списания", "mccard:custom")],
+            nav,
+        ]
+        return (
+            "💳 <b>Карта списания</b> — необязательно. Без ввода останется "
+            "карта шаблона.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == MC_SENDER_CARD_INPUT:
+        return (
+            "💳 Карта списания: 16 цифр, маска или последние 4.\n"
+            "Нажмите, чтобы скопировать: <code>7826</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == MC_ACCOUNT_CHOICE:
+        rows = [
+            [_btn("↩️ Оставить шаблон", "mcacc:keep"), _btn("✍️ Ввести 20 цифр", "mcacc:custom")],
+            nav,
+        ]
+        return (
+            "💳 <b>Счёт списания</b> — необязательно, 20 цифр.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == MC_ACCOUNT_INPUT:
+        return ("💳 Введите счёт целиком — <b>20 цифр</b>.", InlineKeyboardMarkup([nav]))
+    if state == MC_TIME_CHOICE:
+        rows = [
+            [_btn("🕒 Текущее время", "mctime:now"), _btn("✏️ Изменить время", "mctime:change")],
+            nav,
+        ]
+        return (
+            "🕒 <b>Время операции.</b> Секунды движок выведет сам.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == MC_TIME_INPUT:
+        return (
+            "🕒 Введите время операции.\n"
+            "Нажмите, чтобы скопировать: <code>03.11.2026 14:20</code> "
+            "или только <code>14:20</code> (= сегодня).",
+            InlineKeyboardMarkup([nav]),
+        )
+    raise ValueError(f"no mts card prompt for state {state}")
+
+
+async def _send_mts_card_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _mts_card_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+def _mts_card_summary_text(data: dict) -> str:
+    moment: datetime = data["operation_dt"]
+    sender_card = data.get("sender_card") or "карта шаблона"
+    account = data.get("sender_account")
+    account_text = masked_account(account) if account else "счёт шаблона"
+    return "\n".join([
+        "<b>Проверь данные</b>",
+        "",
+        "<b>ЗАЧИСЛЕНИЕ</b>",
+        f"💳 Карта зачисления: <b>{html.escape(str(data.get('recipient_card', '')))}</b>",
+        f"💰 Сумма: <b>{html.escape(str(data.get('amount', '')))}</b>",
+        "",
+        "<b>СПИСАНИЕ</b>",
+        f"💳 Карта списания: <b>{html.escape(str(sender_card))}</b>",
+        f"💳 Счёт: <b>{html.escape(account_text)}</b>",
+        "Комиссия: <b>0,00 ₽</b>",
+        f"🕒 Время: <b>{moment:%d.%m.%Y} {moment:%H:%M}</b> (МСК)",
+    ])
+
+
+async def _send_mts_card_summary(update, context, prefix: str = "") -> int:
+    _save_mts_card_memory(context)
+    context.user_data["current_step"] = MC_SUMMARY
+    await _send_tracked_message(
+        update, context, f"{prefix}{_mts_card_summary_text(context.user_data)}",
+        reply_markup=InlineKeyboardMarkup(
+            [[_btn("✅ Сгенерировать", MC_GENERATE_CB), _btn("✏️ Исправить", MC_EDIT_CB)], _nav_row()]
+        ),
+    )
+    return MC_SUMMARY
+
+
+async def _mts_card_after_field(update, context, next_state: int) -> int:
+    await _delete_user_message(update, context)
+    if context.user_data.pop("editing", False):
+        return await _send_mts_card_summary(update, context)
+    return await _send_mts_card_prompt(update, context, next_state)
+
+
+async def _mts_card_choice_next(update, context, next_state: int) -> int:
+    if context.user_data.pop("editing", False):
+        return await _send_mts_card_summary(update, context)
+    return await _send_mts_card_prompt(update, context, next_state)
+
+
+MTS_CARD_EDIT_FIELDS = {
+    "recipient_card": ("💳 Карта зачисления", MC_RECIPIENT_CARD),
+    "amount": ("💰 Сумма", MC_AMOUNT),
+    "sender_card": ("💳 Карта списания", MC_SENDER_CARD_CHOICE),
+    "sender_account": ("💳 Счёт списания", MC_ACCOUNT_CHOICE),
+    "operation_time": ("🕒 Время", MC_TIME_CHOICE),
+}
+
+
+async def on_mts_card_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "mts_card"
+    return await _send_mts_card_prompt(update, context, MC_RECIPIENT_CARD)
+
+
+async def on_mts_stmt_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data.update(
+        {
+            "scenario": "mts_statement",
+            "stmt_receipt_paths": [],
+            "stmt_receipt_dates": [],
+            "stmt_fill_random": True,
+            "stmt_ops": [],
+            "stmt_account_mode": "keep",
+            "stmt_account": None,
+            "stmt_card": None,
+        }
+    )
+    return await _send_stmt_prompt(update, context, S_PERIOD)
+
+
+async def on_mc_recipient_card(update, context) -> int:
+    try:
+        context.user_data["recipient_card"] = parse_mts_card(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, MC_RECIPIENT_CARD, context)
+    return await _mts_card_after_field(update, context, MC_AMOUNT)
+
+
+async def on_mc_mem_card(update, context) -> int:
+    await update.callback_query.answer()
+    mem = context.user_data.get("mem_mts_card") or {}
+    context.user_data["recipient_card"] = mem.get("recipient_card")
+    context.user_data["sender_card"] = mem.get("sender_card")
+    context.user_data["sender_account"] = mem.get("sender_account")
+    return await _mts_card_choice_next(update, context, MC_AMOUNT)
+
+
+async def on_mc_amount(update, context) -> int:
+    try:
+        context.user_data["amount"] = parse_amount(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, MC_AMOUNT, context)
+    return await _mts_card_after_field(update, context, MC_SENDER_CARD_CHOICE)
+
+
+async def on_mc_sender_card_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_mts_card_prompt(update, context, MC_SENDER_CARD_INPUT)
+    context.user_data["sender_card"] = None
+    return await _mts_card_choice_next(update, context, MC_ACCOUNT_CHOICE)
+
+
+async def on_mc_sender_card_input(update, context) -> int:
+    try:
+        context.user_data["sender_card"] = parse_mts_card(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, MC_SENDER_CARD_INPUT, context)
+    return await _mts_card_after_field(update, context, MC_ACCOUNT_CHOICE)
+
+
+async def on_mc_account_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_mts_card_prompt(update, context, MC_ACCOUNT_INPUT)
+    context.user_data["sender_account"] = None
+    return await _mts_card_choice_next(update, context, MC_TIME_CHOICE)
+
+
+async def on_mc_account_input(update, context) -> int:
+    try:
+        context.user_data["sender_account"] = parse_account20(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, MC_ACCOUNT_INPUT, context)
+    return await _mts_card_after_field(update, context, MC_TIME_CHOICE)
+
+
+async def on_mc_time_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "change":
+        return await _send_mts_card_prompt(update, context, MC_TIME_INPUT)
+    context.user_data["operation_dt"] = rocket_current_time()
+    context.user_data.pop("editing", False)
+    return await _send_mts_card_summary(update, context)
+
+
+async def on_mc_time_input(update, context) -> int:
+    try:
+        context.user_data["operation_dt"] = parse_rocket_time(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, MC_TIME_INPUT, context)
+    await _delete_user_message(update, context)
+    context.user_data.pop("editing", False)
+    return await _send_mts_card_summary(update, context)
+
+
+async def on_mc_summary_edit(update, context) -> int:
+    await update.callback_query.answer()
+    buttons = _rows([
+        _btn(label, f"mcedit:{key}") for key, (label, _state) in MTS_CARD_EDIT_FIELDS.items()
+    ])
+    buttons.append(_nav_row())
+    context.user_data["current_step"] = MC_EDIT_SELECT
+    await _send_tracked_message(
+        update, context, "Что исправить?", reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return MC_EDIT_SELECT
+
+
+async def on_mc_edit_field(update, context) -> int:
+    await update.callback_query.answer()
+    key = update.callback_query.data.split(":", 1)[1]
+    _label, state = MTS_CARD_EDIT_FIELDS[key]
+    context.user_data["editing"] = True
+    return await _send_mts_card_prompt(update, context, state)
+
+
+async def on_mc_generate(update, context) -> int:
+    await update.callback_query.answer()
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    data = dict(context.user_data)
+    await _send_tracked_message(update, context, "⏳ Формирую чек…")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="checketop_mts_card_"))
+    filename = mts_receipt_filename(data)
+    output_path = tmp_dir / filename
+    try:
+        pdf_path = await generate_mts_card_pdf(data, output_path)
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", MTS_CARD_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        moment = data["operation_dt"]
+        caption = (
+            "✅ Чек готов\n"
+            f"Карта зачисления: {data.get('recipient_card')}\n"
+            f"Сумма: {data.get('amount')}\n"
+            f"Время: {moment:%d.%m.%Y} {moment:%H:%M} МСК"
+        )
+        with pdf_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption=caption, reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "MTS card generation failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_mts_card_summary(
+            update, context, prefix=f"{mts_user_error(error)}\n\n"
+        )
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except OSError:
+            pass
+    _save_mts_card_memory(context)
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# Выписка: ручная настройка операций (Рокет / МТС / ВТБ)
+# ---------------------------------------------------------------------------
+
+
+def _stmt_ops_layout_ok(data: dict) -> Tuple[bool, str]:
+    bank = stmt_bank_of(data)
+    allowed = stmt_allowed_counts(bank)
+    count = len(data.get("stmt_ops") or [])
+    if count in allowed:
+        return True, ""
+    pretty = ", ".join(str(n) for n in allowed)
+    return False, (
+        f"Сейчас операций: {count}. Для этой выписки нужно ровно {pretty}. "
+        "Добавьте или удалите операции."
+    )
+
+
+async def on_s_ops_editor_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "add":
+        context.user_data["stmt_op_draft"] = {}
+        return await _send_stmt_prompt(update, context, S_OP_KIND)
+    if slug == "delete":
+        if not (context.user_data.get("stmt_ops") or []):
+            return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+        return await _send_stmt_prompt(update, context, S_OP_DELETE)
+    ok, message = _stmt_ops_layout_ok(context.user_data)
+    if not ok:
+        return await _send_stmt_prompt(
+            update, context, S_OPS_EDITOR, prefix=f"⚠️ {message}\n\n"
+        )
+    context.user_data["stmt_source"] = "manual"
+    context.user_data["stmt_fill_random"] = False
+    context.user_data["stmt_operation_count"] = len(context.user_data.get("stmt_ops") or [])
+    context.user_data.pop("editing", False)
+    return await _send_stmt_summary(update, context)
+
+
+async def on_s_op_kind(update, context) -> int:
+    await update.callback_query.answer()
+    kind = update.callback_query.data.split(":", 1)[1]
+    context.user_data["stmt_op_draft"] = {"kind": kind}
+    return await _send_stmt_prompt(update, context, S_OP_AMOUNT)
+
+
+async def on_s_op_amount(update, context) -> int:
+    try:
+        value = parse_positive_amount(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, S_OP_AMOUNT, context)
+    draft = dict(context.user_data.get("stmt_op_draft") or {})
+    draft["amount"] = format(value, "f")
+    context.user_data["stmt_op_draft"] = draft
+    await _delete_user_message(update, context)
+    return await _send_stmt_prompt(update, context, S_OP_DT_CHOICE)
+
+
+async def on_s_op_dt_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "input":
+        return await _send_stmt_prompt(update, context, S_OP_DT_INPUT)
+    data = context.user_data
+    try:
+        moment = parse_ystmt_op_datetime(
+            "сейчас", data["stmt_period_start"], data["stmt_period_end"]
+        )
+    except ValueError as error:
+        return await _invalid(update, error, S_OP_DT_CHOICE, context)
+    draft = dict(data.get("stmt_op_draft") or {})
+    draft["datetime"] = moment
+    data["stmt_op_draft"] = draft
+    if not _stmt_op_needs_detail(data):
+        _finish_stmt_op(data)
+        return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+    return await _send_stmt_prompt(update, context, S_OP_DETAIL)
+
+
+async def on_s_op_dt_input(update, context) -> int:
+    data = context.user_data
+    try:
+        moment = parse_ystmt_op_datetime(
+            update.effective_message.text,
+            data["stmt_period_start"],
+            data["stmt_period_end"],
+        )
+    except ValueError as error:
+        return await _invalid(update, error, S_OP_DT_INPUT, context)
+    draft = dict(data.get("stmt_op_draft") or {})
+    draft["datetime"] = moment
+    data["stmt_op_draft"] = draft
+    await _delete_user_message(update, context)
+    if not _stmt_op_needs_detail(data):
+        _finish_stmt_op(data)
+        return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+    return await _send_stmt_prompt(update, context, S_OP_DETAIL)
+
+
+def _finish_stmt_op(data: dict) -> None:
+    draft = dict(data.get("stmt_op_draft") or {})
+    bank = stmt_bank_of(data)
+    kind = draft.get("kind") or "sbp_out"
+    op = {
+        "kind": kind,
+        "datetime": draft.get("datetime"),
+        "amount": draft.get("amount"),
+    }
+    if bank == "rocket":
+        if kind in ("sbp_out", "sbp_in"):
+            op["phone"] = draft.get("phone") or data.get("stmt_phone")
+        elif kind == "card":
+            op["card"] = draft.get("card")
+        elif kind == "topup" and draft.get("card_last4"):
+            op["card_last4"] = draft["card_last4"]
+    elif bank == "mts":
+        if kind in ("sbp_out", "sbp_in"):
+            op["recipient"] = draft.get("recipient") or draft.get("description")
+        elif kind == "posted":
+            op["description"] = draft.get("description")
+        elif kind == "card":
+            op["description"] = "Перевод с карты Переводы"
+    else:
+        if kind == "expense":
+            op["kind"] = "sbp_out"
+            op["direction"] = "expense"
+        elif kind == "internal":
+            op["direction"] = "income"
+        elif kind == "card":
+            op["direction"] = "expense"
+        else:
+            op["direction"] = "expense"
+        if draft.get("description"):
+            op["description"] = draft["description"]
+        if draft.get("counterparty"):
+            op["counterparty"] = draft["counterparty"]
+    data.setdefault("stmt_ops", []).append(op)
+    data["stmt_op_draft"] = None
+
+
+def _stmt_op_needs_detail(data: dict) -> bool:
+    bank = stmt_bank_of(data)
+    kind = (data.get("stmt_op_draft") or {}).get("kind")
+    if bank == "mts" and kind == "card":
+        return False
+    return True
+
+
+async def on_s_op_detail_skip(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    data = context.user_data
+    draft = dict(data.get("stmt_op_draft") or {})
+    if slug == "stmt_phone":
+        draft["phone"] = data.get("stmt_phone")
+        data["stmt_op_draft"] = draft
+    _finish_stmt_op(data)
+    return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+
+
+async def on_s_op_detail_text(update, context) -> int:
+    data = context.user_data
+    bank = stmt_bank_of(data)
+    draft = dict(data.get("stmt_op_draft") or {})
+    kind = draft.get("kind")
+    text = update.effective_message.text or ""
+    try:
+        if bank == "rocket" and kind in ("sbp_out", "sbp_in"):
+            draft["phone"] = parse_phone(text)
+        elif bank == "rocket" and kind == "card":
+            draft["card"] = parse_recipient_card(text)
+        elif bank == "rocket" and kind == "topup":
+            digits = re.sub(r"\D", "", text)
+            if len(digits) != 4:
+                raise ValueError("Нужны последние 4 цифры карты, например: 4432")
+            draft["card_last4"] = digits
+        elif bank == "mts" and kind in ("sbp_out", "sbp_in"):
+            draft["recipient"] = parse_name(text, "ФИО")
+        elif bank == "vtb":
+            cleaned = " ".join(text.strip().split())
+            if len(cleaned) < 3:
+                raise ValueError("Описание слишком короткое.")
+            if kind in ("sbp_out", "internal", "expense"):
+                draft["counterparty"] = cleaned
+            draft["description"] = cleaned
+        else:
+            cleaned = " ".join(text.strip().split())
+            if len(cleaned) < 3:
+                raise ValueError("Описание слишком короткое.")
+            draft["description"] = cleaned
+    except ValueError as error:
+        return await _invalid(update, error, S_OP_DETAIL, context)
+    data["stmt_op_draft"] = draft
+    await _delete_user_message(update, context)
+    _finish_stmt_op(data)
+    return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+
+
+async def on_s_op_delete_choice(update, context) -> int:
+    await update.callback_query.answer()
+    index = int(update.callback_query.data.split(":", 1)[1])
+    ops = list(context.user_data.get("stmt_ops") or [])
+    if 0 <= index < len(ops):
+        ops.pop(index)
+        context.user_data["stmt_ops"] = ops
+    return await _send_stmt_prompt(update, context, S_OPS_EDITOR)
+
+
+# ---------------------------------------------------------------------------
+# ВТБ: меню, СБП, карта, выписка
+# ---------------------------------------------------------------------------
+
+
+async def _send_vtb_menu(update, context) -> int:
+    context.user_data["current_step"] = V_MENU
+    await _send_tracked_message(
+        update, context,
+        "🔵 <b>ВТБ</b>. Что сформировать?",
+        reply_markup=_vtb_menu_markup(),
+    )
+    return V_MENU
+
+
+async def on_vtb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    if context.user_data.get("current_step") in (None, BANK_SELECT):
+        _cleanup_stmt_files(dict(context.user_data))
+        _clear_draft(context)
+    return await _send_vtb_menu(update, context)
+
+
+def _save_vtb_memory(context) -> None:
+    data = context.user_data
+    if data.get("sender_name"):
+        previous = dict(data.get("mem_vtb_sender") or {})
+        data["mem_vtb_sender"] = {
+            "sender_name": data.get("sender_name"),
+            "sender_phone": data.get("sender_phone") or previous.get("sender_phone"),
+            "sender_account": data.get("sender_account"),
+        }
+    if data.get("scenario") == "vtb_sbp" and data.get("recipient_name"):
+        data["mem_vtb_recipient"] = {
+            "recipient_name": data.get("recipient_name"),
+            "recipient_phone": data.get("recipient_phone"),
+            "recipient_bank": data.get("recipient_bank"),
+        }
+    if data.get("scenario") == "vtb_card" and data.get("recipient_card"):
+        data["mem_vtb_recipient_card"] = {
+            "recipient_card": data.get("recipient_card"),
+            "recipient_bank": data.get("recipient_bank"),
+            "payer_card": data.get("payer_card"),
+        }
+
+
+def _vtb_prompt(context, state: int):
+    data = context.user_data
+    nav = _nav_row()
+    scenario = data.get("scenario")
+    if state == V_RECIPIENT_NAME:
+        rows = []
+        mem = data.get("mem_vtb_recipient") or {}
+        if mem.get("recipient_name"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['recipient_name']})",
+                V_MEM_RECIPIENT_CB,
+            )])
+        rows.append(nav)
+        return (
+            "👤 <b>Получатель.</b> Введите ФИО.\n"
+            "Нажмите, чтобы скопировать: <code>Петрова Анна Ивановна</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_RECIPIENT_PHONE:
+        return (
+            "📱 <b>Телефон получателя</b> в любом формате.\n"
+            "Нажмите, чтобы скопировать: <code>+7 963 297-20-08</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_RECIPIENT_CARD:
+        rows = []
+        mem = data.get("mem_vtb_recipient_card") or {}
+        if mem.get("recipient_card"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['recipient_card']})",
+                V_MEM_RECIPIENT_CB,
+            )])
+        rows.append(nav)
+        return (
+            "💳 <b>Карта получателя.</b> 16 цифр или маска "
+            "<code>2200 27** **** 4432</code>.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_RECIPIENT_BANK:
+        buttons = [_btn(label, f"vbank:{slug}") for slug, label in VTB_BANK_OPTIONS]
+        buttons.append(_btn("✍️ Ввести свой", "vbank:custom"))
+        return (
+            "🏦 <b>Банк получателя</b> — как в чеке ВТБ:",
+            InlineKeyboardMarkup(_rows(buttons) + [nav]),
+        )
+    if state == V_RECIPIENT_BANK_CUSTOM:
+        return (
+            "🏦 Введите банк получателя.\n"
+            "Нажмите, чтобы скопировать: <code>Сбербанк</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_AMOUNT:
+        note = " Комиссия перевода на карту всегда 99 ₽." if scenario == "vtb_card" else ""
+        return (
+            f"💰 <b>Сумма.</b> Копейки можно.{note}\n"
+            "Нажмите, чтобы скопировать: <code>5 000</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_SENDER_NAME:
+        rows = []
+        mem = data.get("mem_vtb_sender") or {}
+        if mem.get("sender_name"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['sender_name']})",
+                V_MEM_SENDER_CB,
+            )])
+        rows.append(nav)
+        return (
+            "👤 <b>Отправитель.</b> Введите ФИО.\n"
+            "Нажмите, чтобы скопировать: <code>Иванов Иван Иванович</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_SENDER_PHONE:
+        return (
+            "📱 <b>Телефон отправителя</b> (на чеке СБП не печатается, но нужен движку).\n"
+            "Нажмите, чтобы скопировать: <code>+7 900 351-70-80</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_SENDER_ACCOUNT_CHOICE:
+        rows = [
+            [_btn("↩️ Оставить шаблон", "vacc:keep"), _btn("✍️ Ввести 20 цифр", "vacc:custom")],
+            nav,
+        ]
+        return (
+            "💳 <b>Счёт отправителя.</b> «Оставить шаблон» — счёт донора.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_SENDER_ACCOUNT_INPUT:
+        return ("💳 Введите счёт целиком — <b>20 цифр</b>.", InlineKeyboardMarkup([nav]))
+    if state == V_PAYER_CARD_CHOICE:
+        rows = [
+            [_btn("↩️ Пропустить", "vpcard:skip"), _btn("✍️ Ввести карту списания", "vpcard:custom")],
+            nav,
+        ]
+        return (
+            "💳 <b>Карта списания</b> — необязательно.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_PAYER_CARD_INPUT:
+        return (
+            "💳 Карта списания — 16 цифр.\n"
+            "Нажмите, чтобы скопировать: <code>2200270011114432</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_MESSAGE_CHOICE:
+        rows = [
+            [_btn("Без сообщения", "vmsg:none"), _btn("✍️ Ввести своё", "vmsg:custom")],
+            nav,
+        ]
+        return ("💬 <b>Сообщение</b> в чеке СБП:", InlineKeyboardMarkup(rows))
+    if state == V_MESSAGE_INPUT:
+        return (
+            "💬 Введите сообщение.\n"
+            "Нажмите, чтобы скопировать: <code>Перевод СБП</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == V_TIME_CHOICE:
+        rows = [
+            [_btn("🕒 Текущее время", "vtime:now"), _btn("✏️ Изменить время", "vtime:change")],
+            nav,
+        ]
+        return (
+            "🕒 <b>Время операции.</b> Секунды движок выведет сам.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == V_TIME_INPUT:
+        return (
+            "🕒 Введите время операции.\n"
+            "Нажмите, чтобы скопировать: <code>03.11.2026 14:20</code> "
+            "или только <code>14:20</code> (= сегодня).",
+            InlineKeyboardMarkup([nav]),
+        )
+    raise ValueError(f"no vtb prompt for state {state}")
+
+
+async def _send_vtb_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _vtb_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+def _vtb_summary_text(data: dict) -> str:
+    moment: datetime = data["operation_dt"]
+    account = data.get("sender_account")
+    account_text = masked_account(account) if account else "счёт шаблона"
+    lines = ["<b>Проверь данные</b>", "", "<b>ПОЛУЧАТЕЛЬ</b>"]
+    if data.get("scenario") == "vtb_card":
+        lines.append(f"💳 Карта: <b>{html.escape(str(data.get('recipient_card', '')))}</b>")
+        lines.append(f"🏦 Банк: <b>{html.escape(str(data.get('recipient_bank') or '—'))}</b>")
+        lines.append(f"💰 Сумма: <b>{html.escape(str(data.get('amount', '')))}</b>")
+        lines.append("Комиссия: <b>99 ₽</b>")
+    else:
+        lines.append(f"👤 Получатель: <b>{html.escape(str(data.get('recipient_name', '')))}</b>")
+        lines.append(f"📱 Телефон: <b>{html.escape(str(data.get('recipient_phone', '')))}</b>")
+        lines.append(f"🏦 Банк: <b>{html.escape(str(data.get('recipient_bank', '')))}</b>")
+        lines.append(f"💰 Сумма: <b>{html.escape(str(data.get('amount', '')))}</b>")
+        if data.get("vtb_message"):
+            lines.append(f"💬 Сообщение: <b>{html.escape(str(data['vtb_message']))}</b>")
+    lines.extend([
+        "",
+        "<b>ОТПРАВИТЕЛЬ</b>",
+        f"👤 ФИО: <b>{html.escape(str(data.get('sender_name', '')))}</b>",
+    ])
+    if data.get("scenario") == "vtb_sbp":
+        lines.append(f"📱 Телефон: <b>{html.escape(str(data.get('sender_phone', '')))}</b>")
+    lines.append(f"💳 Счёт: <b>{html.escape(account_text)}</b>")
+    if data.get("payer_card"):
+        lines.append(f"💳 Карта списания: <b>{html.escape(str(data['payer_card']))}</b>")
+    lines.append(f"🕒 Время: <b>{moment:%d.%m.%Y} {moment:%H:%M}</b> (МСК)")
+    return "\n".join(lines)
+
+
+async def _send_vtb_summary(update, context, prefix: str = "") -> int:
+    _save_vtb_memory(context)
+    context.user_data["current_step"] = V_SUMMARY
+    await _send_tracked_message(
+        update, context, f"{prefix}{_vtb_summary_text(context.user_data)}",
+        reply_markup=InlineKeyboardMarkup(
+            [[_btn("✅ Сгенерировать", V_GENERATE_CB), _btn("✏️ Исправить", V_EDIT_CB)], _nav_row()]
+        ),
+    )
+    return V_SUMMARY
+
+
+async def _vtb_after_field(update, context, next_state: int) -> int:
+    await _delete_user_message(update, context)
+    if context.user_data.pop("editing", False):
+        return await _send_vtb_summary(update, context)
+    return await _send_vtb_prompt(update, context, next_state)
+
+
+async def _vtb_choice_next(update, context, next_state: int) -> int:
+    if context.user_data.pop("editing", False):
+        return await _send_vtb_summary(update, context)
+    return await _send_vtb_prompt(update, context, next_state)
+
+
+def _vtb_edit_fields(scenario: Optional[str]):
+    if scenario == "vtb_card":
+        return {
+            "recipient_card": ("💳 Карта", V_RECIPIENT_CARD),
+            "recipient_bank": ("🏦 Банк", V_RECIPIENT_BANK),
+            "amount": ("💰 Сумма", V_AMOUNT),
+            "sender_name": ("👤 Отправитель", V_SENDER_NAME),
+            "sender_account": ("💳 Счёт", V_SENDER_ACCOUNT_CHOICE),
+            "payer_card": ("💳 Карта списания", V_PAYER_CARD_CHOICE),
+            "operation_time": ("🕒 Время", V_TIME_CHOICE),
+        }
+    return {
+        "recipient_name": ("👤 Получатель", V_RECIPIENT_NAME),
+        "recipient_phone": ("📱 Телефон", V_RECIPIENT_PHONE),
+        "recipient_bank": ("🏦 Банк", V_RECIPIENT_BANK),
+        "amount": ("💰 Сумма", V_AMOUNT),
+        "sender_name": ("👤 Отправитель", V_SENDER_NAME),
+        "sender_phone": ("📱 Телефон отправителя", V_SENDER_PHONE),
+        "sender_account": ("💳 Счёт", V_SENDER_ACCOUNT_CHOICE),
+        "message": ("💬 Сообщение", V_MESSAGE_CHOICE),
+        "operation_time": ("🕒 Время", V_TIME_CHOICE),
+    }
+
+
+async def on_vtb_sbp_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "vtb_sbp"
+    return await _send_vtb_prompt(update, context, V_RECIPIENT_NAME)
+
+
+async def on_vtb_card_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "vtb_card"
+    return await _send_vtb_prompt(update, context, V_RECIPIENT_CARD)
+
+
+async def on_vtb_stmt_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data.update(
+        {
+            "scenario": "vtb_statement",
+            "stmt_receipt_paths": [],
+            "stmt_receipt_dates": [],
+            "stmt_fill_random": True,
+            "stmt_ops": [],
+            "stmt_account_mode": "keep",
+            "stmt_account": None,
+        }
+    )
+    return await _send_stmt_prompt(update, context, S_PERIOD)
+
+
+async def on_v_recipient_name(update, context) -> int:
+    try:
+        context.user_data["recipient_name"] = parse_name(
+            update.effective_message.text, "ФИО получателя"
+        )
+    except ValueError as error:
+        return await _invalid(update, error, V_RECIPIENT_NAME, context)
+    return await _vtb_after_field(update, context, V_RECIPIENT_PHONE)
+
+
+async def on_v_mem_recipient(update, context) -> int:
+    await update.callback_query.answer()
+    if context.user_data.get("scenario") == "vtb_card":
+        mem = context.user_data.get("mem_vtb_recipient_card") or {}
+        context.user_data["recipient_card"] = mem.get("recipient_card")
+        context.user_data["recipient_bank"] = mem.get("recipient_bank")
+        context.user_data["payer_card"] = mem.get("payer_card")
+        return await _vtb_choice_next(update, context, V_AMOUNT)
+    mem = context.user_data.get("mem_vtb_recipient") or {}
+    context.user_data["recipient_name"] = mem.get("recipient_name")
+    context.user_data["recipient_phone"] = mem.get("recipient_phone")
+    context.user_data["recipient_bank"] = mem.get("recipient_bank")
+    return await _vtb_choice_next(update, context, V_AMOUNT)
+
+
+async def on_v_recipient_phone(update, context) -> int:
+    try:
+        context.user_data["recipient_phone"] = parse_phone(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_RECIPIENT_PHONE, context)
+    return await _vtb_after_field(update, context, V_RECIPIENT_BANK)
+
+
+async def on_v_recipient_card(update, context) -> int:
+    try:
+        context.user_data["recipient_card"] = parse_vtb_payee_card(
+            update.effective_message.text
+        )
+    except ValueError as error:
+        return await _invalid(update, error, V_RECIPIENT_CARD, context)
+    return await _vtb_after_field(update, context, V_RECIPIENT_BANK)
+
+
+async def on_v_bank_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_vtb_prompt(update, context, V_RECIPIENT_BANK_CUSTOM)
+    for key, label in VTB_BANK_OPTIONS:
+        if key == slug:
+            context.user_data["recipient_bank"] = label
+            break
+    return await _vtb_choice_next(update, context, V_AMOUNT)
+
+
+async def on_v_bank_custom(update, context) -> int:
+    try:
+        context.user_data["recipient_bank"] = parse_bank(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_RECIPIENT_BANK_CUSTOM, context)
+    return await _vtb_after_field(update, context, V_AMOUNT)
+
+
+async def on_v_amount(update, context) -> int:
+    try:
+        context.user_data["amount"] = parse_amount(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_AMOUNT, context)
+    return await _vtb_after_field(update, context, V_SENDER_NAME)
+
+
+async def on_v_sender_name(update, context) -> int:
+    try:
+        context.user_data["sender_name"] = parse_name(
+            update.effective_message.text, "ФИО отправителя"
+        )
+    except ValueError as error:
+        return await _invalid(update, error, V_SENDER_NAME, context)
+    next_state = (
+        V_SENDER_ACCOUNT_CHOICE
+        if context.user_data.get("scenario") == "vtb_card"
+        else V_SENDER_PHONE
+    )
+    return await _vtb_after_field(update, context, next_state)
+
+
+async def on_v_mem_sender(update, context) -> int:
+    await update.callback_query.answer()
+    mem = context.user_data.get("mem_vtb_sender") or {}
+    context.user_data["sender_name"] = mem.get("sender_name")
+    context.user_data["sender_phone"] = mem.get("sender_phone")
+    context.user_data["sender_account"] = mem.get("sender_account")
+    next_state = (
+        V_PAYER_CARD_CHOICE
+        if context.user_data.get("scenario") == "vtb_card"
+        else V_MESSAGE_CHOICE
+    )
+    return await _vtb_choice_next(update, context, next_state)
+
+
+async def on_v_sender_phone(update, context) -> int:
+    try:
+        context.user_data["sender_phone"] = parse_phone(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_SENDER_PHONE, context)
+    return await _vtb_after_field(update, context, V_SENDER_ACCOUNT_CHOICE)
+
+
+async def on_v_account_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_vtb_prompt(update, context, V_SENDER_ACCOUNT_INPUT)
+    context.user_data["sender_account"] = None
+    next_state = (
+        V_PAYER_CARD_CHOICE
+        if context.user_data.get("scenario") == "vtb_card"
+        else V_MESSAGE_CHOICE
+    )
+    return await _vtb_choice_next(update, context, next_state)
+
+
+async def on_v_account_input(update, context) -> int:
+    try:
+        context.user_data["sender_account"] = parse_account20(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_SENDER_ACCOUNT_INPUT, context)
+    next_state = (
+        V_PAYER_CARD_CHOICE
+        if context.user_data.get("scenario") == "vtb_card"
+        else V_MESSAGE_CHOICE
+    )
+    return await _vtb_after_field(update, context, next_state)
+
+
+async def on_v_payer_card_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_vtb_prompt(update, context, V_PAYER_CARD_INPUT)
+    context.user_data["payer_card"] = None
+    return await _vtb_choice_next(update, context, V_TIME_CHOICE)
+
+
+async def on_v_payer_card_input(update, context) -> int:
+    try:
+        context.user_data["payer_card"] = parse_recipient_card(
+            update.effective_message.text
+        ).replace(" **** **** ", "")
+        digits = re.sub(r"\D", "", update.effective_message.text or "")
+        if len(digits) != 16:
+            raise ValueError("Карта списания — 16 цифр.")
+        context.user_data["payer_card"] = digits
+    except ValueError as error:
+        return await _invalid(update, error, V_PAYER_CARD_INPUT, context)
+    return await _vtb_after_field(update, context, V_TIME_CHOICE)
+
+
+async def on_v_message_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_vtb_prompt(update, context, V_MESSAGE_INPUT)
+    context.user_data["vtb_message"] = None
+    return await _vtb_choice_next(update, context, V_TIME_CHOICE)
+
+
+async def on_v_message_input(update, context) -> int:
+    cleaned = " ".join((update.effective_message.text or "").strip().split())
+    if not (2 <= len(cleaned) <= 80):
+        return await _invalid(
+            update, ValueError("Сообщение — от 2 до 80 символов."),
+            V_MESSAGE_INPUT, context,
+        )
+    context.user_data["vtb_message"] = cleaned
+    return await _vtb_after_field(update, context, V_TIME_CHOICE)
+
+
+async def on_v_time_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "change":
+        return await _send_vtb_prompt(update, context, V_TIME_INPUT)
+    context.user_data["operation_dt"] = rocket_current_time()
+    context.user_data.pop("editing", False)
+    return await _send_vtb_summary(update, context)
+
+
+async def on_v_time_input(update, context) -> int:
+    try:
+        context.user_data["operation_dt"] = parse_rocket_time(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, V_TIME_INPUT, context)
+    await _delete_user_message(update, context)
+    context.user_data.pop("editing", False)
+    return await _send_vtb_summary(update, context)
+
+
+async def on_v_summary_edit(update, context) -> int:
+    await update.callback_query.answer()
+    fields = _vtb_edit_fields(context.user_data.get("scenario"))
+    buttons = _rows([_btn(label, f"vedit:{key}") for key, (label, _state) in fields.items()])
+    buttons.append(_nav_row())
+    context.user_data["current_step"] = V_EDIT_SELECT
+    await _send_tracked_message(
+        update, context, "Что исправить?", reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return V_EDIT_SELECT
+
+
+async def on_v_edit_field(update, context) -> int:
+    await update.callback_query.answer()
+    key = update.callback_query.data.split(":", 1)[1]
+    fields = _vtb_edit_fields(context.user_data.get("scenario"))
+    _label, state = fields[key]
+    context.user_data["editing"] = True
+    return await _send_vtb_prompt(update, context, state)
+
+
+async def on_v_generate(update, context) -> int:
+    await update.callback_query.answer()
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    data = dict(context.user_data)
+    scenario = data.get("scenario")
+    await _send_tracked_message(update, context, "⏳ Формирую чек…")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="checketop_vtb_"))
+    filename = vtb_receipt_filename(data)
+    output_path = tmp_dir / filename
+    try:
+        if scenario == "vtb_card":
+            pdf_path = await generate_vtb_card_pdf(data, output_path)
+            again_cb = VTB_CARD_CB
+        else:
+            pdf_path = await generate_vtb_pdf(data, output_path)
+            again_cb = VTB_SBP_CB
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", again_cb)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        with pdf_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption=_vtb_summary_text(data).replace("<b>", "").replace("</b>", ""),
+                reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "VTB generation failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_vtb_summary(update, context, prefix=f"{vtb_user_error(error)}\n\n")
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except OSError:
+            pass
+    _save_vtb_memory(context)
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
+# ВБ Банк: только чек СБП
+# ---------------------------------------------------------------------------
+
+
+async def _send_wb_menu(update, context) -> int:
+    context.user_data["current_step"] = W_MENU
+    await _send_tracked_message(
+        update, context,
+        "🟣 <b>ВБ Банк</b>. Что сформировать?",
+        reply_markup=_wb_menu_markup(),
+    )
+    return W_MENU
+
+
+async def on_wb_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    if context.user_data.get("current_step") in (None, BANK_SELECT):
+        _clear_draft(context)
+    return await _send_wb_menu(update, context)
+
+
+def _save_wb_memory(context) -> None:
+    data = context.user_data
+    if data.get("recipient_name"):
+        data["mem_wb_recipient"] = {
+            "recipient_name": data.get("recipient_name"),
+            "recipient_phone": data.get("recipient_phone"),
+            "recipient_bank": data.get("recipient_bank"),
+        }
+
+
+def _wb_prompt(context, state: int):
+    data = context.user_data
+    nav = _nav_row()
+    if state == W_RECIPIENT_NAME:
+        rows = []
+        mem = data.get("mem_wb_recipient") or {}
+        if mem.get("recipient_name"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['recipient_name']})",
+                W_MEM_RECIPIENT_CB,
+            )])
+        rows.append(nav)
+        return (
+            "👤 <b>Получатель.</b> Введите ФИО. Нет Ё, нет «Константин».\n"
+            "Нажмите, чтобы скопировать: <code>Иванов Иван Иванович</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == W_RECIPIENT_PHONE:
+        return (
+            "📱 <b>Телефон получателя</b> в любом формате.\n"
+            "Нажмите, чтобы скопировать: <code>+7 963 297-20-08</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == W_RECIPIENT_BANK:
+        buttons = [_btn(label, f"wbank:{slug}") for slug, label in WB_BANK_OPTIONS]
+        buttons.append(_btn("✍️ Ввести свой", "wbank:custom"))
+        return (
+            "🏦 <b>Банк получателя.</b> «Озон» в пуле глифов нет.",
+            InlineKeyboardMarkup(_rows(buttons) + [nav]),
+        )
+    if state == W_RECIPIENT_BANK_CUSTOM:
+        return (
+            "🏦 Введите банк получателя.\n"
+            "Нажмите, чтобы скопировать: <code>Сбербанк</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == W_AMOUNT:
+        return (
+            "💰 <b>Сумма — только целые рубли</b> (цифры 0–3 в Medium: "
+            "15 ₽ откажет).\n"
+            "Нажмите, чтобы скопировать: <code>12</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == W_TIME_CHOICE:
+        rows = [
+            [_btn("🕒 Текущее время", "wtime:now"), _btn("✏️ Изменить время", "wtime:change")],
+            nav,
+        ]
+        return (
+            "🕒 <b>Время операции.</b> Секунды движок выведет сам.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == W_TIME_INPUT:
+        return (
+            "🕒 Введите время операции.\n"
+            "Нажмите, чтобы скопировать: <code>03.11.2026 14:20</code> "
+            "или только <code>14:20</code> (= сегодня).",
+            InlineKeyboardMarkup([nav]),
+        )
+    raise ValueError(f"no wb prompt for state {state}")
+
+
+async def _send_wb_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _wb_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+def _wb_summary_text(data: dict) -> str:
+    moment: datetime = data["operation_dt"]
+    return "\n".join([
+        "<b>Проверь данные</b>",
+        "",
+        "<b>ПОЛУЧАТЕЛЬ</b>",
+        f"👤 Получатель: <b>{html.escape(str(data.get('recipient_name', '')))}</b>",
+        f"📱 Телефон: <b>{html.escape(str(data.get('recipient_phone', '')))}</b>",
+        f"🏦 Банк: <b>{html.escape(str(data.get('recipient_bank', '')))}</b>",
+        f"💰 Сумма: <b>{html.escape(str(data.get('amount', '')))}</b>",
+        f"🕒 Время: <b>{moment:%d.%m.%Y} {moment:%H:%M}</b> (МСК)",
+    ])
+
+
+async def _send_wb_summary(update, context, prefix: str = "") -> int:
+    _save_wb_memory(context)
+    context.user_data["current_step"] = W_SUMMARY
+    await _send_tracked_message(
+        update, context, f"{prefix}{_wb_summary_text(context.user_data)}",
+        reply_markup=InlineKeyboardMarkup(
+            [[_btn("✅ Сгенерировать", W_GENERATE_CB), _btn("✏️ Исправить", W_EDIT_CB)], _nav_row()]
+        ),
+    )
+    return W_SUMMARY
+
+
+async def _wb_after_field(update, context, next_state: int) -> int:
+    await _delete_user_message(update, context)
+    if context.user_data.pop("editing", False):
+        return await _send_wb_summary(update, context)
+    return await _send_wb_prompt(update, context, next_state)
+
+
+async def _wb_choice_next(update, context, next_state: int) -> int:
+    if context.user_data.pop("editing", False):
+        return await _send_wb_summary(update, context)
+    return await _send_wb_prompt(update, context, next_state)
+
+
+WB_EDIT_FIELDS = {
+    "recipient_name": ("👤 Получатель", W_RECIPIENT_NAME),
+    "recipient_phone": ("📱 Телефон", W_RECIPIENT_PHONE),
+    "recipient_bank": ("🏦 Банк", W_RECIPIENT_BANK),
+    "amount": ("💰 Сумма", W_AMOUNT),
+    "operation_time": ("🕒 Время", W_TIME_CHOICE),
+}
+
+
+async def on_wb_sbp_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _clear_draft(context)
+    context.user_data["scenario"] = "wb"
+    return await _send_wb_prompt(update, context, W_RECIPIENT_NAME)
+
+
+async def on_w_recipient_name(update, context) -> int:
+    try:
+        context.user_data["recipient_name"] = parse_name(
+            update.effective_message.text, "ФИО получателя"
+        )
+    except ValueError as error:
+        return await _invalid(update, error, W_RECIPIENT_NAME, context)
+    return await _wb_after_field(update, context, W_RECIPIENT_PHONE)
+
+
+async def on_w_mem_recipient(update, context) -> int:
+    await update.callback_query.answer()
+    mem = context.user_data.get("mem_wb_recipient") or {}
+    context.user_data["recipient_name"] = mem.get("recipient_name")
+    context.user_data["recipient_phone"] = mem.get("recipient_phone")
+    context.user_data["recipient_bank"] = mem.get("recipient_bank")
+    return await _wb_choice_next(update, context, W_AMOUNT)
+
+
+async def on_w_recipient_phone(update, context) -> int:
+    try:
+        context.user_data["recipient_phone"] = parse_phone(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, W_RECIPIENT_PHONE, context)
+    return await _wb_after_field(update, context, W_RECIPIENT_BANK)
+
+
+async def on_w_bank_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_wb_prompt(update, context, W_RECIPIENT_BANK_CUSTOM)
+    for key, label in WB_BANK_OPTIONS:
+        if key == slug:
+            context.user_data["recipient_bank"] = label
+            break
+    return await _wb_choice_next(update, context, W_AMOUNT)
+
+
+async def on_w_bank_custom(update, context) -> int:
+    try:
+        context.user_data["recipient_bank"] = parse_bank(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, W_RECIPIENT_BANK_CUSTOM, context)
+    return await _wb_after_field(update, context, W_AMOUNT)
+
+
+async def on_w_amount(update, context) -> int:
+    try:
+        context.user_data["amount"] = parse_wb_amount(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, W_AMOUNT, context)
+    return await _wb_after_field(update, context, W_TIME_CHOICE)
+
+
+async def on_w_time_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "change":
+        return await _send_wb_prompt(update, context, W_TIME_INPUT)
+    context.user_data["operation_dt"] = rocket_current_time()
+    context.user_data.pop("editing", False)
+    return await _send_wb_summary(update, context)
+
+
+async def on_w_time_input(update, context) -> int:
+    try:
+        context.user_data["operation_dt"] = parse_rocket_time(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, W_TIME_INPUT, context)
+    await _delete_user_message(update, context)
+    context.user_data.pop("editing", False)
+    return await _send_wb_summary(update, context)
+
+
+async def on_w_summary_edit(update, context) -> int:
+    await update.callback_query.answer()
+    buttons = _rows([
+        _btn(label, f"wedit:{key}") for key, (label, _state) in WB_EDIT_FIELDS.items()
+    ])
+    buttons.append(_nav_row())
+    context.user_data["current_step"] = W_EDIT_SELECT
+    await _send_tracked_message(
+        update, context, "Что исправить?", reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return W_EDIT_SELECT
+
+
+async def on_w_edit_field(update, context) -> int:
+    await update.callback_query.answer()
+    key = update.callback_query.data.split(":", 1)[1]
+    _label, state = WB_EDIT_FIELDS[key]
+    context.user_data["editing"] = True
+    return await _send_wb_prompt(update, context, state)
+
+
+async def on_w_generate(update, context) -> int:
+    await update.callback_query.answer()
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    data = dict(context.user_data)
+    await _send_tracked_message(update, context, "⏳ Формирую чек…")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="checketop_wb_"))
+    filename = wb_receipt_filename(data)
+    output_path = tmp_dir / filename
+    try:
+        pdf_path = await generate_wb_pdf(data, output_path)
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", WB_SBP_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        moment = data["operation_dt"]
+        caption = (
+            "✅ Чек готов\n"
+            f"{data.get('recipient_name')} · {data.get('recipient_phone')} · "
+            f"{data.get('recipient_bank')}\n"
+            f"Сумма: {data.get('amount')}\n"
+            f"Время: {moment:%d.%m.%Y} {moment:%H:%M} МСК"
+        )
+        with pdf_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption=caption, reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "WB generation failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_wb_summary(update, context, prefix=f"{wb_user_error(error)}\n\n")
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except OSError:
+            pass
+    _save_wb_memory(context)
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
 # Сборка приложения
 # ---------------------------------------------------------------------------
 
@@ -5444,9 +7786,18 @@ def build_application(token: str) -> Application:
             CallbackQueryHandler(choose_yandex, pattern=f"^{YANDEX_CB}$"),
             CallbackQueryHandler(on_rocket_menu, pattern=f"^{ROCKET_MENU_CB}$"),
             CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
+            CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
+            CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
             CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),
             CallbackQueryHandler(on_rocket_card_start, pattern=f"^{ROCKET_CARD_CB}$"),
             CallbackQueryHandler(on_rocket_stmt_start, pattern=f"^{ROCKET_STMT_CB}$"),
+            CallbackQueryHandler(on_mts_sbp_start, pattern=f"^{MTS_SBP_CB}$"),
+            CallbackQueryHandler(on_mts_card_start, pattern=f"^{MTS_CARD_CB}$"),
+            CallbackQueryHandler(on_mts_stmt_start, pattern=f"^{MTS_STMT_CB}$"),
+            CallbackQueryHandler(on_vtb_sbp_start, pattern=f"^{VTB_SBP_CB}$"),
+            CallbackQueryHandler(on_vtb_card_start, pattern=f"^{VTB_CARD_CB}$"),
+            CallbackQueryHandler(on_vtb_stmt_start, pattern=f"^{VTB_STMT_CB}$"),
+            CallbackQueryHandler(on_wb_sbp_start, pattern=f"^{WB_SBP_CB}$"),
             CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
             CallbackQueryHandler(
                 on_yandex_doc_choice,
@@ -5458,6 +7809,8 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(choose_yandex, pattern=f"^{YANDEX_CB}$"),
                 CallbackQueryHandler(on_rocket_menu, pattern=f"^{ROCKET_MENU_CB}$"),
                 CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
+                CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
+                CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
             ],
             M_RECIPIENT_NAME: [
                 MessageHandler(text, on_mts_name),
@@ -5493,6 +7846,133 @@ def build_application(token: str) -> Application:
             ],
             M_EDIT_SELECT: [
                 CallbackQueryHandler(on_mts_edit_field, pattern=r"^medit:[a-z_]+$"),
+                back,
+            ],
+            M_MENU: [
+                CallbackQueryHandler(on_mts_sbp_start, pattern=f"^{MTS_SBP_CB}$"),
+                CallbackQueryHandler(on_mts_card_start, pattern=f"^{MTS_CARD_CB}$"),
+                CallbackQueryHandler(on_mts_stmt_start, pattern=f"^{MTS_STMT_CB}$"),
+                CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
+                back,
+            ],
+            MC_RECIPIENT_CARD: [
+                MessageHandler(text, on_mc_recipient_card),
+                CallbackQueryHandler(on_mc_mem_card, pattern=f"^{MC_MEM_CARD_CB}$"),
+                back,
+            ],
+            MC_AMOUNT: [MessageHandler(text, on_mc_amount), back],
+            MC_SENDER_CARD_CHOICE: [
+                CallbackQueryHandler(on_mc_sender_card_choice, pattern=r"^mccard:(skip|custom)$"),
+                back,
+            ],
+            MC_SENDER_CARD_INPUT: [MessageHandler(text, on_mc_sender_card_input), back],
+            MC_ACCOUNT_CHOICE: [
+                CallbackQueryHandler(on_mc_account_choice, pattern=r"^mcacc:(keep|custom)$"),
+                back,
+            ],
+            MC_ACCOUNT_INPUT: [MessageHandler(text, on_mc_account_input), back],
+            MC_TIME_CHOICE: [
+                CallbackQueryHandler(on_mc_time_choice, pattern=r"^mctime:[a-z]+$"),
+                back,
+            ],
+            MC_TIME_INPUT: [MessageHandler(text, on_mc_time_input), back],
+            MC_SUMMARY: [
+                CallbackQueryHandler(on_mc_generate, pattern=f"^{MC_GENERATE_CB}$"),
+                CallbackQueryHandler(on_mc_summary_edit, pattern=f"^{MC_EDIT_CB}$"),
+                back,
+            ],
+            MC_EDIT_SELECT: [
+                CallbackQueryHandler(on_mc_edit_field, pattern=r"^mcedit:[a-z_]+$"),
+                back,
+            ],
+            V_MENU: [
+                CallbackQueryHandler(on_vtb_sbp_start, pattern=f"^{VTB_SBP_CB}$"),
+                CallbackQueryHandler(on_vtb_card_start, pattern=f"^{VTB_CARD_CB}$"),
+                CallbackQueryHandler(on_vtb_stmt_start, pattern=f"^{VTB_STMT_CB}$"),
+                CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
+                back,
+            ],
+            V_RECIPIENT_NAME: [
+                MessageHandler(text, on_v_recipient_name),
+                CallbackQueryHandler(on_v_mem_recipient, pattern=f"^{V_MEM_RECIPIENT_CB}$"),
+                back,
+            ],
+            V_RECIPIENT_PHONE: [MessageHandler(text, on_v_recipient_phone), back],
+            V_RECIPIENT_CARD: [
+                MessageHandler(text, on_v_recipient_card),
+                CallbackQueryHandler(on_v_mem_recipient, pattern=f"^{V_MEM_RECIPIENT_CB}$"),
+                back,
+            ],
+            V_RECIPIENT_BANK: [
+                CallbackQueryHandler(on_v_bank_choice, pattern=r"^vbank:[a-z]+$"),
+                back,
+            ],
+            V_RECIPIENT_BANK_CUSTOM: [MessageHandler(text, on_v_bank_custom), back],
+            V_AMOUNT: [MessageHandler(text, on_v_amount), back],
+            V_SENDER_NAME: [
+                MessageHandler(text, on_v_sender_name),
+                CallbackQueryHandler(on_v_mem_sender, pattern=f"^{V_MEM_SENDER_CB}$"),
+                back,
+            ],
+            V_SENDER_PHONE: [MessageHandler(text, on_v_sender_phone), back],
+            V_SENDER_ACCOUNT_CHOICE: [
+                CallbackQueryHandler(on_v_account_choice, pattern=r"^vacc:(keep|custom)$"),
+                back,
+            ],
+            V_SENDER_ACCOUNT_INPUT: [MessageHandler(text, on_v_account_input), back],
+            V_PAYER_CARD_CHOICE: [
+                CallbackQueryHandler(on_v_payer_card_choice, pattern=r"^vpcard:(skip|custom)$"),
+                back,
+            ],
+            V_PAYER_CARD_INPUT: [MessageHandler(text, on_v_payer_card_input), back],
+            V_MESSAGE_CHOICE: [
+                CallbackQueryHandler(on_v_message_choice, pattern=r"^vmsg:(none|custom)$"),
+                back,
+            ],
+            V_MESSAGE_INPUT: [MessageHandler(text, on_v_message_input), back],
+            V_TIME_CHOICE: [
+                CallbackQueryHandler(on_v_time_choice, pattern=r"^vtime:[a-z]+$"),
+                back,
+            ],
+            V_TIME_INPUT: [MessageHandler(text, on_v_time_input), back],
+            V_SUMMARY: [
+                CallbackQueryHandler(on_v_generate, pattern=f"^{V_GENERATE_CB}$"),
+                CallbackQueryHandler(on_v_summary_edit, pattern=f"^{V_EDIT_CB}$"),
+                back,
+            ],
+            V_EDIT_SELECT: [
+                CallbackQueryHandler(on_v_edit_field, pattern=r"^vedit:[a-z_]+$"),
+                back,
+            ],
+            W_MENU: [
+                CallbackQueryHandler(on_wb_sbp_start, pattern=f"^{WB_SBP_CB}$"),
+                CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
+                back,
+            ],
+            W_RECIPIENT_NAME: [
+                MessageHandler(text, on_w_recipient_name),
+                CallbackQueryHandler(on_w_mem_recipient, pattern=f"^{W_MEM_RECIPIENT_CB}$"),
+                back,
+            ],
+            W_RECIPIENT_PHONE: [MessageHandler(text, on_w_recipient_phone), back],
+            W_RECIPIENT_BANK: [
+                CallbackQueryHandler(on_w_bank_choice, pattern=r"^wbank:[a-z]+$"),
+                back,
+            ],
+            W_RECIPIENT_BANK_CUSTOM: [MessageHandler(text, on_w_bank_custom), back],
+            W_AMOUNT: [MessageHandler(text, on_w_amount), back],
+            W_TIME_CHOICE: [
+                CallbackQueryHandler(on_w_time_choice, pattern=r"^wtime:[a-z]+$"),
+                back,
+            ],
+            W_TIME_INPUT: [MessageHandler(text, on_w_time_input), back],
+            W_SUMMARY: [
+                CallbackQueryHandler(on_w_generate, pattern=f"^{W_GENERATE_CB}$"),
+                CallbackQueryHandler(on_w_summary_edit, pattern=f"^{W_EDIT_CB}$"),
+                back,
+            ],
+            W_EDIT_SELECT: [
+                CallbackQueryHandler(on_w_edit_field, pattern=r"^wedit:[a-z_]+$"),
                 back,
             ],
             R_MENU: [
@@ -5561,6 +8041,11 @@ def build_application(token: str) -> Application:
             ],
             S_ACCOUNT_TAIL_INPUT: [MessageHandler(text, on_s_account_tail), back],
             S_ACCOUNT_FULL_INPUT: [MessageHandler(text, on_s_account_full), back],
+            S_CARD: [
+                CallbackQueryHandler(on_s_card_choice, pattern=r"^scard:skip$"),
+                MessageHandler(text, on_s_card_input),
+                back,
+            ],
             S_OPENING: [MessageHandler(text, on_s_opening), back],
             S_OP_COUNT_CHOICE: [
                 CallbackQueryHandler(on_s_op_count_choice, pattern=r"^scount:(custom|\d+)$"),
@@ -5599,6 +8084,29 @@ def build_application(token: str) -> Application:
             ],
             S_EDIT_SELECT: [
                 CallbackQueryHandler(on_s_edit_field, pattern=r"^sedit:[a-z_]+$"),
+                back,
+            ],
+            S_OPS_EDITOR: [
+                CallbackQueryHandler(on_s_ops_editor_choice, pattern=r"^sops:[a-z]+$"),
+                back,
+            ],
+            S_OP_KIND: [
+                CallbackQueryHandler(on_s_op_kind, pattern=r"^sopk:[a-z_]+$"),
+                back,
+            ],
+            S_OP_AMOUNT: [MessageHandler(text, on_s_op_amount), back],
+            S_OP_DT_CHOICE: [
+                CallbackQueryHandler(on_s_op_dt_choice, pattern=r"^sopdt:[a-z]+$"),
+                back,
+            ],
+            S_OP_DT_INPUT: [MessageHandler(text, on_s_op_dt_input), back],
+            S_OP_DETAIL: [
+                CallbackQueryHandler(on_s_op_detail_skip, pattern=r"^sopd:[a-z_]+$"),
+                MessageHandler(text, on_s_op_detail_text),
+                back,
+            ],
+            S_OP_DELETE: [
+                CallbackQueryHandler(on_s_op_delete_choice, pattern=r"^sopdel:\d+$"),
                 back,
             ],
             Y_MENU: [

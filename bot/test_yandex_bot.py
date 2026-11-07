@@ -19,7 +19,7 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -1020,12 +1020,21 @@ class MtsBotTest(unittest.TestCase):
         self.assertIn("🔴 МТС", labels)
         self.assertIn("🟡 Яндекс чек", labels)
         self.assertIn("🚀 Рокетбанк", labels)
+        self.assertIn("🔵 ВТБ", labels)
+        self.assertIn("🟣 ВБ Банк", labels)
         self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
         self.assertEqual(bot.mts_receipt_filename({}), "Unknown.pdf")
+        mts_menu = bot._mts_menu_markup()
+        mts_labels = [button.text for row in mts_menu.inline_keyboard for button in row]
+        self.assertIn("💸 Перевод по СБП", mts_labels)
+        self.assertIn("💳 Перевод по карте", mts_labels)
+        self.assertIn("📄 Выписка", mts_labels)
 
     def test_flow_to_summary_and_edit(self):
         context = fake_context()
         state = run(bot.on_mts_start(fake_update(callback="bank:mts"), context))
+        self.assertEqual(state, bot.M_MENU)
+        state = run(bot.on_mts_sbp_start(fake_update(callback="mts:sbp"), context))
         self.assertEqual(state, bot.M_RECIPIENT_NAME)
         state = run(bot.on_mts_name(fake_update(text="Петрова Анна Ивановна"), context))
         self.assertEqual(state, bot.M_RECIPIENT_PHONE)
@@ -1121,6 +1130,159 @@ class MtsBotTest(unittest.TestCase):
         self.assertEqual(state, bot.M_SUMMARY)
         self.assertTrue(any("нужен новый чек владельца" in m for m in context.bot.messages))
         self.assertEqual(context.bot.documents, [])
+
+    def test_mts_card_flow_and_fake_engine(self):
+        self.assertEqual(bot.parse_mts_card("8429"), "8429")
+        self.assertEqual(bot.parse_mts_card("2200 1234 5678 8429"), "2200123456788429")
+        with self.assertRaises(ValueError):
+            bot.parse_mts_card("12")
+        context = fake_context()
+        state = run(bot.on_mts_card_start(fake_update(callback="mts:card"), context))
+        self.assertEqual(state, bot.MC_RECIPIENT_CARD)
+        self.assertEqual(context.user_data["scenario"], "mts_card")
+        state = run(bot.on_mc_recipient_card(fake_update(text="8429"), context))
+        self.assertEqual(state, bot.MC_AMOUNT)
+        state = run(bot.on_mc_amount(fake_update(text="225,50"), context))
+        self.assertEqual(state, bot.MC_SENDER_CARD_CHOICE)
+        self.assertEqual(context.user_data["amount"], "225,50 ₽")
+        state = run(bot.on_mc_sender_card_choice(fake_update(callback="mccard:skip"), context))
+        self.assertEqual(state, bot.MC_ACCOUNT_CHOICE)
+        state = run(bot.on_mc_account_choice(fake_update(callback="mcacc:keep"), context))
+        self.assertEqual(state, bot.MC_TIME_CHOICE)
+        state = run(bot.on_mc_time_choice(fake_update(callback="mctime:now"), context))
+        self.assertEqual(state, bot.MC_SUMMARY)
+        self.assertIn("0,00 ₽", context.bot.messages[-1])
+        data = dict(context.user_data)
+        fake = '''
+from pathlib import Path
+def generate_mts(*args, **kwargs):
+    raise AssertionError("SBP must not be called")
+def generate_mts_card(amount, operation_dt, recipient_card, output_path=None,
+                      sender_card=None, sender_account=None, **kwargs):
+    assert amount == "225,50 ₽", amount
+    assert recipient_card == "8429", recipient_card
+    assert sender_card is None
+    assert sender_account is None
+    Path(output_path).write_bytes(b"%PDF-1.5 fake-mts-card")
+    return output_path
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "engine.py"
+            engine.write_text(fake, encoding="utf-8")
+            os.environ["MTS_ENGINE_PATH"] = str(engine)
+            bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+            try:
+                context = fake_context(data)
+                state = run(bot.on_mc_generate(fake_update(callback="mcgen:generate"), context))
+            finally:
+                os.environ.pop("MTS_ENGINE_PATH", None)
+                bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+        self.assertEqual(state, -1)
+        self.assertEqual(context.bot.documents[0]["filename"], "Unknown.pdf")
+
+        broken = '''
+class GlyphCoverageError(RuntimeError):
+    pass
+def generate_mts(**kwargs):
+    pass
+def generate_mts_card(**kwargs):
+    raise GlyphCoverageError("нет глифа")
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "engine.py"
+            engine.write_text(broken, encoding="utf-8")
+            os.environ["MTS_ENGINE_PATH"] = str(engine)
+            bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+            try:
+                context = fake_context(data)
+                state = run(bot.on_mc_generate(fake_update(callback="mcgen:generate"), context))
+            finally:
+                os.environ.pop("MTS_ENGINE_PATH", None)
+                bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+        self.assertEqual(state, bot.MC_SUMMARY)
+        self.assertTrue(any("Не получилось" in m for m in context.bot.messages))
+
+    def test_mts_statement_counts_and_manual_ops(self):
+        self.assertEqual(bot.parse_stmt_operation_count("20", "mts"), 20)
+        for bad in ("1", "4", "10", "6"):
+            with self.assertRaises(ValueError, msg=bad):
+                bot.parse_stmt_operation_count(bad, "mts")
+        context = fake_context()
+        state = run(bot.on_mts_stmt_start(fake_update(callback="mts:stmt"), context))
+        self.assertEqual(state, bot.S_PERIOD)
+        self.assertEqual(context.user_data["scenario"], "mts_statement")
+        state = run(bot.on_s_period(fake_update(text="01.11.2026–07.11.2026"), context))
+        self.assertEqual(state, bot.S_ISSUE_CHOICE)
+        state = run(bot.on_s_issue_choice(fake_update(callback="sissue:today"), context))
+        self.assertEqual(state, bot.S_HOLDER)
+        state = run(bot.on_s_holder(fake_update(text="Иванов Иван Иванович"), context))
+        self.assertEqual(state, bot.S_ACCOUNT_CHOICE)
+        _text, markup = bot._stmt_prompt(context, bot.S_OP_COUNT_CHOICE)
+        labels = [button.text for row in markup.inline_keyboard for button in row]
+        self.assertEqual(labels.count("0") + labels.count("2") + labels.count("3")
+                         + labels.count("5") + labels.count("20"), 5)
+        self.assertNotIn("Другое (0–10)", " ".join(labels))
+        context.user_data.update({
+            "stmt_period_start": date(2026, 11, 1),
+            "stmt_period_end": date(2026, 11, 7),
+            "stmt_issue_date": date(2026, 11, 7),
+            "stmt_holder_name": "Иванов Иван Иванович",
+            "stmt_opening_balance": "16.00",
+            "stmt_operation_count": 2,
+        })
+        state = run(bot.on_s_source_choice(fake_update(callback="ssource:manual"), context))
+        self.assertEqual(state, bot.S_OPS_EDITOR)
+        state = run(bot.on_s_op_kind(fake_update(callback="sopk:sbp_out"), context))
+        self.assertEqual(state, bot.S_OP_AMOUNT)
+        state = run(bot.on_s_op_amount(fake_update(text="1500"), context))
+        self.assertEqual(state, bot.S_OP_DT_CHOICE)
+        context.user_data["stmt_period_start"] = date(2026, 11, 4)
+        context.user_data["stmt_period_end"] = date(2026, 11, 4)
+        state = run(bot.on_s_op_dt_input(fake_update(text="04.11.2026 12:40"), context))
+        self.assertEqual(state, bot.S_OP_DETAIL)
+        state = run(bot.on_s_op_detail_text(fake_update(text="Петрова Анна Ивановна"), context))
+        self.assertEqual(state, bot.S_OPS_EDITOR)
+        self.assertEqual(len(context.user_data["stmt_ops"]), 1)
+        self.assertEqual(context.user_data["stmt_ops"][0]["kind"], "sbp_out")
+        self.assertEqual(context.user_data["stmt_ops"][0]["recipient"], "Петрова Анна Ивановна")
+        state = run(bot.on_s_ops_editor_choice(fake_update(callback="sops:done"), context))
+        self.assertEqual(state, bot.S_OPS_EDITOR)
+        self.assertTrue(any("нужно ровно" in m for m in context.bot.messages))
+        fake = '''
+from pathlib import Path
+def generate_mts(**kwargs):
+    pass
+def generate_mts_statement(period_start, period_end, issue_date, holder_name,
+                           account=None, card=None, opening_balance=None,
+                           operations=None, operation_count=None,
+                           receipt_paths=None, fill_random=True, output_path=None, **kwargs):
+    assert fill_random is False
+    assert operation_count == 2
+    assert len(operations) == 2
+    assert operations[0]["kind"] == "sbp_out"
+    Path(output_path).write_bytes(b"%PDF-1.5 fake-mts-stmt")
+    return output_path
+'''
+        context.user_data["stmt_ops"].append({
+            "kind": "sbp_in",
+            "datetime": bot.parse_ystmt_op_datetime(
+                "04.11.2026 13:00", date(2026, 11, 4), date(2026, 11, 4)
+            ),
+            "amount": "10.00",
+            "recipient": "Иванов Иван Иванович",
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "engine.py"
+            engine.write_text(fake, encoding="utf-8")
+            os.environ["MTS_ENGINE_PATH"] = str(engine)
+            bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+            try:
+                state = run(bot.on_s_generate(fake_update(callback="sgen:generate"), context))
+            finally:
+                os.environ.pop("MTS_ENGINE_PATH", None)
+                bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+        self.assertEqual(state, -1)
+        self.assertTrue(context.bot.documents)
 
 
 if __name__ == "__main__":

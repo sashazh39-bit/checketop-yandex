@@ -282,6 +282,25 @@ class FontPool:
                 raise ValueError(f"conflicting GID for {char!r}")
             self.char_to_gid[char] = gid
 
+    def fill_from(self, other: "FontPool") -> None:
+        """Copy glyphs this pool does not yet have (first-writer wins)."""
+        if other.head is None:
+            return
+        if self.head is None:
+            self.head, self.hhea = other.head, other.hhea
+            self.hmtx, self.maxp = other.hmtx, other.maxp
+            self.num_glyphs = other.num_glyphs
+            self.widths = list(other.widths)
+            self.checksums = dict(other.checksums)
+        for gid, data in other.glyph_data.items():
+            if gid not in self.glyph_data:
+                self.glyph_data[gid] = data
+                if gid in other.synthetic_gids:
+                    self.synthetic_gids.add(gid)
+        self.known_gids.update(other.known_gids)
+        for char, gid in other.char_to_gid.items():
+            self.char_to_gid.setdefault(char, gid)
+
     def absorb_synthetic(self, source: "OtfGlyphSource") -> int:
         """Fill NOT-yet-covered characters from a converted CFF master.
 
