@@ -174,6 +174,36 @@ Y_DOC_STMT_CB = "ydoc:stmt"
     YS_SUMMARY,
     YS_EDIT_SELECT,
 ) = range(50, 75)
+(
+    M_RECIPIENT_NAME,
+    M_RECIPIENT_PHONE,
+    M_RECIPIENT_BANK,
+    M_RECIPIENT_BANK_CUSTOM,
+    M_AMOUNT,
+    M_ACCOUNT_CHOICE,
+    M_ACCOUNT_INPUT,
+    M_MESSAGE_CHOICE,
+    M_MESSAGE_INPUT,
+    M_TIME_CHOICE,
+    M_TIME_INPUT,
+    M_SUMMARY,
+    M_EDIT_SELECT,
+) = range(75, 88)
+M_MEM_RECIPIENT_CB = "mmem:recipient"
+M_GENERATE_CB = "mgen:generate"
+M_EDIT_CB = "mgen:edit"
+MTS_BANK_OPTIONS = (
+    ("sber", "Сбербанк"),
+    ("tbank", "Т-Банк"),
+    ("vtb", "ВТБ"),
+    ("alfa", "Альфа-Банк"),
+    ("psb", "ПСБ"),
+    ("ozon", "Озон Банк (Ozon)"),
+    ("otp", "ОТП Банк"),
+    ("sovcom", "Совкомбанк"),
+    ("rshb", "Россельхозбанк"),
+    ("yandex", "Яндекс"),
+)
 YS_GENERATE_CB = "ysgen:generate"
 YS_EDIT_CB = "ysgen:edit"
 YS_MEM_HOLDER_CB = "ysmem:holder"
@@ -238,6 +268,7 @@ YANDEX_BANK_OPTIONS = (
 ) = range(25, 44)
 
 ROCKET_MENU_CB = "bank:rocket"
+MTS_CB = "bank:mts"
 MAIN_MENU_CB = "menu:main"
 BACK_CB = "nav:back"
 ROCKET_SBP_CB = "rocket:sbp"
@@ -386,6 +417,20 @@ def parse_bank(text: str) -> str:
     ):
         raise ValueError(
             "Не понял название банка. Введите, например: Сбербанк"
+        )
+    return cleaned
+
+
+def parse_mts_message(text: str) -> str:
+    """Короткое сообщение МТС: кириллица, до 40 символов."""
+    cleaned = " ".join((text or "").strip().split())
+    if (
+        not (2 <= len(cleaned) <= 40)
+        or not re.search(r"[А-Яа-яЁё]", cleaned)
+        or not re.fullmatch(r"[А-Яа-яЁё0-9 .,«»()-]+", cleaned)
+    ):
+        raise ValueError(
+            "Сообщение — короткое, кириллицей. Например: Перевод СБП"
         )
     return cleaned
 
@@ -1352,6 +1397,83 @@ def receipt_operation_date(operation: dict) -> date:
     raise ValueError("Движок не вернул дату операции чека")
 
 
+DEFAULT_MTS_ENGINE_PATH = REPO_ROOT / "banks" / "mts" / "engine.py"
+_MTS_ENGINE_CACHE: dict = {"path": None, "module": None, "pool": None}
+
+
+def mts_engine_path() -> Path:
+    override = os.environ.get("MTS_ENGINE_PATH")
+    return Path(override).expanduser() if override else DEFAULT_MTS_ENGINE_PATH
+
+
+def load_mts_engine():
+    """Модуль движка МТС. Пул глифов строится один раз на этот путь."""
+    path = mts_engine_path()
+    if _MTS_ENGINE_CACHE["path"] == path and _MTS_ENGINE_CACHE["module"] is not None:
+        return _MTS_ENGINE_CACHE["module"]
+    if not path.is_file():
+        raise FileNotFoundError(f"Движок МТС не найден: {path}")
+    spec = importlib.util.spec_from_file_location("checketop_mts_engine", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Не удалось загрузить движок МТС из {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["checketop_mts_engine"] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "generate_mts", None)):
+        raise AttributeError(f"В {path} нет функции generate_mts(...)")
+    _MTS_ENGINE_CACHE["path"] = path
+    _MTS_ENGINE_CACHE["module"] = module
+    _MTS_ENGINE_CACHE["pool"] = None
+    return module
+
+
+def mts_glyph_pool(module):
+    """Один пул на процесс: 14 PDF и конверсия шрифтов не повторяются."""
+    if _MTS_ENGINE_CACHE.get("pool") is not None:
+        return _MTS_ENGINE_CACHE["pool"]
+    builder = getattr(module, "build_pool", None)
+    donors = getattr(module, "_donor_paths", None)
+    if not callable(builder) or not callable(donors):
+        return None
+    pool = builder(donors())
+    _MTS_ENGINE_CACHE["pool"] = pool
+    return pool
+
+
+async def generate_mts_pdf(data: dict, output_path: Path) -> Path:
+    """Чек МТС: только вызов ``generate_mts``. PDF-логики нет."""
+    module = load_mts_engine()
+    kwargs = dict(
+        amount=data["amount"],
+        operation_dt=data["operation_dt"],
+        recipient_name=data["recipient_name"],
+        recipient_phone=data["recipient_phone"],
+        recipient_bank=data["recipient_bank"],
+        output_path=str(output_path),
+        sender_account=data.get("sender_account"),
+        message=data.get("mts_message"),
+    )
+    pool = mts_glyph_pool(module)
+    if pool is not None:
+        kwargs["pool"] = pool
+    result = await asyncio.to_thread(module.generate_mts, **kwargs)
+    return _ensure_pdf_result(result, output_path, "generate_mts")
+
+
+def mts_user_error(error: BaseException) -> str:
+    if error.__class__.__name__ == "GlyphCoverageError":
+        return (
+            "Не получилось: буквы вне пула настоящих чеков МТС, "
+            "нужен новый чек владельца"
+        )
+    return f"Не получилось: {_short_error(error)}"
+
+
+def mts_receipt_filename(data: dict) -> str:
+    """Имя как у настоящей выгрузки МТС: ``Unknown.pdf``."""
+    return "Unknown.pdf"
+
+
 def rocket_receipt_filename(data: dict) -> str:
     """Имя как у настоящей выгрузки Рокета из банка: ``receipt_rocket.pdf``."""
     return "receipt_rocket.pdf"
@@ -1625,6 +1747,8 @@ async def _invalid(update: Update, error: ValueError, state: int, context=None) 
             builders = [lambda: _rocket_prompt(context, state)]
         elif scenario == "rocket_statement":
             builders = [lambda: _stmt_prompt(context, state)]
+        elif scenario == "mts":
+            builders = [lambda: _mts_prompt(context, state)]
         for build in builders:
             await _delete_user_message(update, context)
             try:
@@ -1695,7 +1819,13 @@ def _rows(buttons: list, width: int = 2) -> list:
 
 def _main_menu_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [[_btn("🟡 Яндекс чек", YANDEX_CB), _btn("🚀 Рокетбанк", ROCKET_MENU_CB)]]
+        _rows(
+            [
+                _btn("🟡 Яндекс чек", YANDEX_CB),
+                _btn("🚀 Рокетбанк", ROCKET_MENU_CB),
+                _btn("🔴 МТС", MTS_CB),
+            ]
+        )
     )
 
 
@@ -2146,6 +2276,23 @@ def _statement_edit_fields():
 
 def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
     scenario = data.get("scenario")
+    if scenario == "mts":
+        mapping = {
+            M_RECIPIENT_NAME: None,
+            M_RECIPIENT_PHONE: M_RECIPIENT_NAME,
+            M_RECIPIENT_BANK: M_RECIPIENT_PHONE,
+            M_RECIPIENT_BANK_CUSTOM: M_RECIPIENT_BANK,
+            M_AMOUNT: M_RECIPIENT_BANK,
+            M_ACCOUNT_CHOICE: M_AMOUNT,
+            M_ACCOUNT_INPUT: M_ACCOUNT_CHOICE,
+            M_MESSAGE_CHOICE: M_ACCOUNT_CHOICE,
+            M_MESSAGE_INPUT: M_MESSAGE_CHOICE,
+            M_TIME_CHOICE: M_MESSAGE_CHOICE,
+            M_TIME_INPUT: M_TIME_CHOICE,
+            M_SUMMARY: M_TIME_CHOICE,
+            M_EDIT_SELECT: M_SUMMARY,
+        }
+        return mapping.get(current)
     if scenario == "yandex_statement":
         mapping = {
             Y_MENU: None,
@@ -4152,6 +4299,8 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             return await _send_summary(update, context)
         if data.get("scenario") == "yandex_statement":
             return await _send_ystmt_summary(update, context)
+        if data.get("scenario") == "mts":
+            return await _send_mts_summary(update, context)
         if current in STATEMENT_EDIT_STATES.values() or data.get("scenario") == "rocket_statement":
             return await _send_stmt_summary(update, context)
         return await _send_rocket_summary(update, context)
@@ -4178,6 +4327,14 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if target == CONFIRM:
             return await _send_summary(update, context)
         return await _send_prompt(update, context, target)
+    if data.get("scenario") == "mts":
+        target = _back_target(data, current)
+        if target is None:
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        if target == M_SUMMARY:
+            return await _send_mts_summary(update, context)
+        return await _send_mts_prompt(update, context, target)
     target = _back_target(data, current)
     if target is None:
         _cleanup_stmt_files(dict(context.user_data))
@@ -4906,6 +5063,373 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # ---------------------------------------------------------------------------
+# МТС: чек СБП
+# ---------------------------------------------------------------------------
+
+
+def _save_mts_memory(context) -> None:
+    data = context.user_data
+    if data.get("recipient_name"):
+        data["mem_mts_recipient"] = {
+            "recipient_name": data.get("recipient_name"),
+            "recipient_phone": data.get("recipient_phone"),
+            "recipient_bank": data.get("recipient_bank"),
+        }
+
+
+def _mts_prompt(context, state: int):
+    data = context.user_data
+    nav = _nav_row()
+    if state == M_RECIPIENT_NAME:
+        rows = []
+        mem = data.get("mem_mts_recipient") or {}
+        if mem.get("recipient_name"):
+            rows.append([_btn(
+                f"↩️ Оставить как в прошлый раз ({mem['recipient_name']})",
+                M_MEM_RECIPIENT_CB,
+            )])
+        rows.append(nav)
+        return (
+            "👤 <b>Получатель.</b> Введите ФИО.\n"
+            "Нажмите, чтобы скопировать: <code>Петрова Анна Ивановна</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == M_RECIPIENT_PHONE:
+        return (
+            "📱 <b>Телефон получателя</b> в любом формате.\n"
+            "Нажмите, чтобы скопировать: <code>+7 963 297-20-08</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == M_RECIPIENT_BANK:
+        buttons = [_btn(label, f"mbank:{slug}") for slug, label in MTS_BANK_OPTIONS]
+        buttons.append(_btn("✍️ Ввести свой", "mbank:custom"))
+        return (
+            "🏦 <b>Банк получателя</b> — как в чеке МТС:",
+            InlineKeyboardMarkup(_rows(buttons) + [nav]),
+        )
+    if state == M_RECIPIENT_BANK_CUSTOM:
+        return (
+            "🏦 Введите банк получателя.\n"
+            "Нажмите, чтобы скопировать: <code>Сбербанк</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == M_AMOUNT:
+        return (
+            "💰 <b>Сумма.</b> Копейки можно. Комиссия в чеке всегда 0,00 ₽.\n"
+            "Нажмите, чтобы скопировать: <code>1 500,00</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == M_ACCOUNT_CHOICE:
+        rows = [
+            [_btn("↩️ Оставить свой", "macc:keep"), _btn("✍️ Ввести свой целиком", "macc:custom")],
+            nav,
+        ]
+        return (
+            "💳 <b>Счёт списания.</b> «Оставить свой» — счёт из шаблона. "
+            "Свой — 20 цифр.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == M_ACCOUNT_INPUT:
+        return (
+            "💳 Введите счёт целиком — <b>20 цифр</b>.",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == M_MESSAGE_CHOICE:
+        rows = [
+            [_btn("Перевод СБП", "mmsg:default"), _btn("✍️ Ввести своё", "mmsg:custom")],
+            nav,
+        ]
+        return ("💬 <b>Сообщение</b> в чеке:", InlineKeyboardMarkup(rows))
+    if state == M_MESSAGE_INPUT:
+        return (
+            "💬 Введите короткое сообщение кириллицей.\n"
+            "Нажмите, чтобы скопировать: <code>Перевод СБП</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == M_TIME_CHOICE:
+        rows = [
+            [_btn("🕒 Текущее время", "mtime:now"), _btn("✏️ Изменить время", "mtime:change")],
+            nav,
+        ]
+        return (
+            "🕒 <b>Время операции.</b> Секунды движок выведет сам.",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == M_TIME_INPUT:
+        return (
+            "🕒 Введите время операции.\n"
+            "Нажмите, чтобы скопировать: <code>03.11.2026 14:20</code> "
+            "или только <code>14:20</code> (= сегодня).",
+            InlineKeyboardMarkup([nav]),
+        )
+    raise ValueError(f"no mts prompt for state {state}")
+
+
+async def _send_mts_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _mts_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+def _mts_summary_text(data: dict) -> str:
+    moment: datetime = data["operation_dt"]
+    account = data.get("sender_account")
+    account_text = masked_account(account) if account else "счёт шаблона"
+    message = data.get("mts_message") or "Перевод СБП"
+    lines = [
+        "<b>Проверь данные</b>",
+        "",
+        "<b>ПОЛУЧАТЕЛЬ</b>",
+        f"👤 Получатель: <b>{html.escape(str(data.get('recipient_name', '')))}</b>",
+        f"📱 Телефон: <b>{html.escape(str(data.get('recipient_phone', '')))}</b>",
+        f"🏦 Банк: <b>{html.escape(str(data.get('recipient_bank', '')))}</b>",
+        f"💰 Сумма: <b>{html.escape(str(data.get('amount', '')))}</b>",
+        f"💬 Сообщение: <b>{html.escape(message)}</b>",
+        "",
+        "<b>СПИСАНИЕ</b>",
+        f"💳 Счёт: <b>{html.escape(account_text)}</b>",
+        "Комиссия: <b>0,00 ₽</b>",
+        f"🕒 Время: <b>{moment:%d.%m.%Y} {moment:%H:%M}</b> (МСК)",
+    ]
+    return "\n".join(lines)
+
+
+def _mts_summary_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[_btn("✅ Сгенерировать", M_GENERATE_CB), _btn("✏️ Исправить", M_EDIT_CB)], _nav_row()]
+    )
+
+
+async def _send_mts_summary(update, context, prefix: str = "") -> int:
+    _save_mts_memory(context)
+    context.user_data["current_step"] = M_SUMMARY
+    await _send_tracked_message(
+        update, context, f"{prefix}{_mts_summary_text(context.user_data)}",
+        reply_markup=_mts_summary_markup(),
+    )
+    return M_SUMMARY
+
+
+async def _mts_after_field(update, context, next_state: int) -> int:
+    await _delete_user_message(update, context)
+    if context.user_data.pop("editing", False):
+        return await _send_mts_summary(update, context)
+    return await _send_mts_prompt(update, context, next_state)
+
+
+async def _mts_choice_next(update, context, next_state: int) -> int:
+    if context.user_data.pop("editing", False):
+        return await _send_mts_summary(update, context)
+    return await _send_mts_prompt(update, context, next_state)
+
+
+MTS_EDIT_FIELDS = {
+    "recipient_name": ("👤 Получатель", M_RECIPIENT_NAME),
+    "recipient_phone": ("📱 Телефон", M_RECIPIENT_PHONE),
+    "recipient_bank": ("🏦 Банк", M_RECIPIENT_BANK),
+    "amount": ("💰 Сумма", M_AMOUNT),
+    "sender_account": ("💳 Счёт списания", M_ACCOUNT_CHOICE),
+    "message": ("💬 Сообщение", M_MESSAGE_CHOICE),
+    "operation_time": ("🕒 Время", M_TIME_CHOICE),
+}
+
+
+async def on_mts_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _cleanup_yandex_template_files(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "mts"
+    return await _send_mts_prompt(update, context, M_RECIPIENT_NAME)
+
+
+async def on_mts_name(update, context) -> int:
+    try:
+        context.user_data["recipient_name"] = parse_name(
+            update.effective_message.text, "ФИО получателя"
+        )
+    except ValueError as error:
+        return await _invalid(update, error, M_RECIPIENT_NAME, context)
+    return await _mts_after_field(update, context, M_RECIPIENT_PHONE)
+
+
+async def on_mts_mem_recipient(update, context) -> int:
+    await update.callback_query.answer()
+    mem = context.user_data.get("mem_mts_recipient") or {}
+    context.user_data["recipient_name"] = mem.get("recipient_name")
+    context.user_data["recipient_phone"] = mem.get("recipient_phone")
+    context.user_data["recipient_bank"] = mem.get("recipient_bank")
+    return await _mts_choice_next(update, context, M_AMOUNT)
+
+
+async def on_mts_phone(update, context) -> int:
+    try:
+        context.user_data["recipient_phone"] = parse_phone(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_RECIPIENT_PHONE, context)
+    return await _mts_after_field(update, context, M_RECIPIENT_BANK)
+
+
+async def on_mts_bank_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_mts_prompt(update, context, M_RECIPIENT_BANK_CUSTOM)
+    for key, label in MTS_BANK_OPTIONS:
+        if key == slug:
+            context.user_data["recipient_bank"] = label
+            break
+    return await _mts_choice_next(update, context, M_AMOUNT)
+
+
+async def on_mts_bank_custom(update, context) -> int:
+    try:
+        context.user_data["recipient_bank"] = parse_bank(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_RECIPIENT_BANK_CUSTOM, context)
+    return await _mts_after_field(update, context, M_AMOUNT)
+
+
+async def on_mts_amount(update, context) -> int:
+    try:
+        context.user_data["amount"] = parse_amount(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_AMOUNT, context)
+    return await _mts_after_field(update, context, M_ACCOUNT_CHOICE)
+
+
+async def on_mts_account_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_mts_prompt(update, context, M_ACCOUNT_INPUT)
+    context.user_data["sender_account"] = None
+    return await _mts_choice_next(update, context, M_MESSAGE_CHOICE)
+
+
+async def on_mts_account_input(update, context) -> int:
+    try:
+        context.user_data["sender_account"] = parse_account20(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_ACCOUNT_INPUT, context)
+    return await _mts_after_field(update, context, M_MESSAGE_CHOICE)
+
+
+async def on_mts_message_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "custom":
+        return await _send_mts_prompt(update, context, M_MESSAGE_INPUT)
+    context.user_data["mts_message"] = None
+    return await _mts_choice_next(update, context, M_TIME_CHOICE)
+
+
+async def on_mts_message_input(update, context) -> int:
+    try:
+        context.user_data["mts_message"] = parse_mts_message(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_MESSAGE_INPUT, context)
+    return await _mts_after_field(update, context, M_TIME_CHOICE)
+
+
+async def on_mts_time_choice(update, context) -> int:
+    await update.callback_query.answer()
+    slug = update.callback_query.data.split(":", 1)[1]
+    if slug == "change":
+        return await _send_mts_prompt(update, context, M_TIME_INPUT)
+    context.user_data["operation_dt"] = rocket_current_time()
+    context.user_data.pop("editing", False)
+    return await _send_mts_summary(update, context)
+
+
+async def on_mts_time_input(update, context) -> int:
+    try:
+        context.user_data["operation_dt"] = parse_rocket_time(update.effective_message.text)
+    except ValueError as error:
+        return await _invalid(update, error, M_TIME_INPUT, context)
+    await _delete_user_message(update, context)
+    context.user_data.pop("editing", False)
+    return await _send_mts_summary(update, context)
+
+
+async def on_mts_summary_edit(update, context) -> int:
+    await update.callback_query.answer()
+    buttons = _rows([
+        _btn(label, f"medit:{key}") for key, (label, _state) in MTS_EDIT_FIELDS.items()
+    ])
+    buttons.append(_nav_row())
+    context.user_data["current_step"] = M_EDIT_SELECT
+    await _send_tracked_message(
+        update, context, "Что исправить?", reply_markup=InlineKeyboardMarkup(buttons)
+    )
+    return M_EDIT_SELECT
+
+
+async def on_mts_edit_field(update, context) -> int:
+    await update.callback_query.answer()
+    key = update.callback_query.data.split(":", 1)[1]
+    _label, state = MTS_EDIT_FIELDS[key]
+    context.user_data["editing"] = True
+    return await _send_mts_prompt(update, context, state)
+
+
+def _mts_caption(data: dict) -> str:
+    moment: datetime = data["operation_dt"]
+    account = data.get("sender_account")
+    account_text = masked_account(account) if account else "счёт шаблона"
+    return (
+        "✅ Чек готов\n"
+        f"Получатель: {data.get('recipient_name')} · {data.get('recipient_phone')} · "
+        f"{data.get('recipient_bank')}\n"
+        f"Сумма: {data.get('amount')}\n"
+        f"Счёт: {account_text}\n"
+        f"Сообщение: {data.get('mts_message') or 'Перевод СБП'}\n"
+        f"Время: {moment:%d.%m.%Y} {moment:%H:%M} МСК"
+    )
+
+
+async def on_mts_generate(update, context) -> int:
+    await update.callback_query.answer()
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    data = dict(context.user_data)
+    await _send_tracked_message(update, context, "⏳ Формирую чек…")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="checketop_mts_"))
+    filename = mts_receipt_filename(data)
+    output_path = tmp_dir / filename
+    try:
+        pdf_path = await generate_mts_pdf(data, output_path)
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", MTS_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        with pdf_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption=_mts_caption(data), reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "MTS receipt generation failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_mts_summary(update, context, prefix=f"{mts_user_error(error)}\n\n")
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            tmp_dir.rmdir()
+        except OSError:
+            pass
+    _save_mts_memory(context)
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
 # Сборка приложения
 # ---------------------------------------------------------------------------
 
@@ -4919,6 +5443,7 @@ def build_application(token: str) -> Application:
             CommandHandler("start", start),
             CallbackQueryHandler(choose_yandex, pattern=f"^{YANDEX_CB}$"),
             CallbackQueryHandler(on_rocket_menu, pattern=f"^{ROCKET_MENU_CB}$"),
+            CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
             CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),
             CallbackQueryHandler(on_rocket_card_start, pattern=f"^{ROCKET_CARD_CB}$"),
             CallbackQueryHandler(on_rocket_stmt_start, pattern=f"^{ROCKET_STMT_CB}$"),
@@ -4932,6 +5457,43 @@ def build_application(token: str) -> Application:
             BANK_SELECT: [
                 CallbackQueryHandler(choose_yandex, pattern=f"^{YANDEX_CB}$"),
                 CallbackQueryHandler(on_rocket_menu, pattern=f"^{ROCKET_MENU_CB}$"),
+                CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
+            ],
+            M_RECIPIENT_NAME: [
+                MessageHandler(text, on_mts_name),
+                CallbackQueryHandler(on_mts_mem_recipient, pattern=f"^{M_MEM_RECIPIENT_CB}$"),
+                back,
+            ],
+            M_RECIPIENT_PHONE: [MessageHandler(text, on_mts_phone), back],
+            M_RECIPIENT_BANK: [
+                CallbackQueryHandler(on_mts_bank_choice, pattern=r"^mbank:[a-z]+$"),
+                back,
+            ],
+            M_RECIPIENT_BANK_CUSTOM: [MessageHandler(text, on_mts_bank_custom), back],
+            M_AMOUNT: [MessageHandler(text, on_mts_amount), back],
+            M_ACCOUNT_CHOICE: [
+                CallbackQueryHandler(on_mts_account_choice, pattern=r"^macc:(keep|custom)$"),
+                back,
+            ],
+            M_ACCOUNT_INPUT: [MessageHandler(text, on_mts_account_input), back],
+            M_MESSAGE_CHOICE: [
+                CallbackQueryHandler(on_mts_message_choice, pattern=r"^mmsg:(default|custom)$"),
+                back,
+            ],
+            M_MESSAGE_INPUT: [MessageHandler(text, on_mts_message_input), back],
+            M_TIME_CHOICE: [
+                CallbackQueryHandler(on_mts_time_choice, pattern=r"^mtime:[a-z]+$"),
+                back,
+            ],
+            M_TIME_INPUT: [MessageHandler(text, on_mts_time_input), back],
+            M_SUMMARY: [
+                CallbackQueryHandler(on_mts_generate, pattern=f"^{M_GENERATE_CB}$"),
+                CallbackQueryHandler(on_mts_summary_edit, pattern=f"^{M_EDIT_CB}$"),
+                back,
+            ],
+            M_EDIT_SELECT: [
+                CallbackQueryHandler(on_mts_edit_field, pattern=r"^medit:[a-z_]+$"),
+                back,
             ],
             R_MENU: [
                 CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),

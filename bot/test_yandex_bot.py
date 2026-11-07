@@ -983,5 +983,145 @@ class EngineCallTest(unittest.TestCase):
             os.environ.pop("YANDEX_ENGINE_PATH", None)
 
 
+FAKE_MTS_ENGINE = '''
+from pathlib import Path
+
+def generate_mts(amount, operation_dt, recipient_name, recipient_phone,
+                 recipient_bank, output_path, sender_account=None, message=None,
+                 donor_path=None, pool=None, generated_at=None):
+    assert amount == "1 500,00 ₽", amount
+    assert operation_dt.second == 0 and operation_dt.tzinfo is not None
+    assert recipient_name == "Петрова Анна Ивановна", recipient_name
+    assert recipient_phone == "+7 963 297-20-08", recipient_phone
+    assert recipient_bank == "Сбербанк", recipient_bank
+    assert sender_account is None, sender_account
+    assert message is None, message
+    assert donor_path is None
+    Path(output_path).write_bytes(b"%PDF-1.5 fake-mts")
+    return output_path
+'''
+
+BROKEN_MTS_ENGINE = '''
+class GlyphCoverageError(RuntimeError):
+    pass
+
+def generate_mts(**kwargs):
+    raise GlyphCoverageError("Буквы вне пула глифов настоящих чеков МТС: Ю")
+'''
+
+
+class MtsBotTest(unittest.TestCase):
+    def test_message_and_menu(self):
+        self.assertEqual(bot.parse_mts_message("  Перевод   СБП "), "Перевод СБП")
+        with self.assertRaises(ValueError):
+            bot.parse_mts_message("hello")
+        markup = bot._main_menu_markup()
+        labels = [button.text for row in markup.inline_keyboard for button in row]
+        self.assertIn("🔴 МТС", labels)
+        self.assertIn("🟡 Яндекс чек", labels)
+        self.assertIn("🚀 Рокетбанк", labels)
+        self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
+        self.assertEqual(bot.mts_receipt_filename({}), "Unknown.pdf")
+
+    def test_flow_to_summary_and_edit(self):
+        context = fake_context()
+        state = run(bot.on_mts_start(fake_update(callback="bank:mts"), context))
+        self.assertEqual(state, bot.M_RECIPIENT_NAME)
+        state = run(bot.on_mts_name(fake_update(text="Петрова Анна Ивановна"), context))
+        self.assertEqual(state, bot.M_RECIPIENT_PHONE)
+        state = run(bot.on_mts_phone(fake_update(text="89632972008"), context))
+        self.assertEqual(state, bot.M_RECIPIENT_BANK)
+        self.assertEqual(context.user_data["recipient_phone"], "+7 963 297-20-08")
+        state = run(bot.on_mts_bank_choice(fake_update(callback="mbank:sber"), context))
+        self.assertEqual(state, bot.M_AMOUNT)
+        state = run(bot.on_mts_amount(fake_update(text="1500"), context))
+        self.assertEqual(state, bot.M_ACCOUNT_CHOICE)
+        self.assertEqual(context.user_data["amount"], "1 500,00 ₽")
+        state = run(bot.on_mts_account_choice(fake_update(callback="macc:keep"), context))
+        self.assertEqual(state, bot.M_MESSAGE_CHOICE)
+        self.assertIsNone(context.user_data["sender_account"])
+        state = run(bot.on_mts_message_choice(fake_update(callback="mmsg:default"), context))
+        self.assertEqual(state, bot.M_TIME_CHOICE)
+        self.assertIsNone(context.user_data["mts_message"])
+        state = run(bot.on_mts_time_choice(fake_update(callback="mtime:now"), context))
+        self.assertEqual(state, bot.M_SUMMARY)
+        self.assertEqual(context.user_data["operation_dt"].second, 0)
+        summary = context.bot.messages[-1]
+        self.assertIn("ПОЛУЧАТЕЛЬ", summary)
+        self.assertIn("Перевод СБП", summary)
+        self.assertIn("0,00 ₽", summary)
+        state = run(bot.on_mts_summary_edit(fake_update(callback="mgen:edit"), context))
+        self.assertEqual(state, bot.M_EDIT_SELECT)
+        state = run(bot.on_mts_edit_field(fake_update(callback="medit:amount"), context))
+        self.assertEqual(state, bot.M_AMOUNT)
+        state = run(bot.on_mts_amount(fake_update(text="248,50"), context))
+        self.assertEqual(state, bot.M_SUMMARY)
+        self.assertEqual(context.user_data["amount"], "248,50 ₽")
+
+    def test_back_and_memory(self):
+        context = fake_context({
+            "scenario": "mts",
+            "current_step": bot.M_RECIPIENT_PHONE,
+            "recipient_name": "Петрова Анна Ивановна",
+        })
+        state = run(bot.on_nav_back(fake_update(callback="nav:back"), context))
+        self.assertEqual(state, bot.M_RECIPIENT_NAME)
+        bot._save_mts_memory(context)
+        context.user_data.update({
+            "recipient_name": "Петрова Анна Ивановна",
+            "recipient_phone": "+7 963 297-20-08",
+            "recipient_bank": "Сбербанк",
+        })
+        bot._save_mts_memory(context)
+        bot._clear_draft(context)
+        self.assertIn("mem_mts_recipient", context.user_data)
+        context.user_data["scenario"] = "mts"
+        state = run(bot.on_mts_mem_recipient(fake_update(callback="mmem:recipient"), context))
+        self.assertEqual(state, bot.M_AMOUNT)
+        self.assertEqual(context.user_data["recipient_bank"], "Сбербанк")
+
+    def test_generate_with_fake_engine_and_glyph_error(self):
+        data = {
+            "scenario": "mts",
+            "current_step": bot.M_SUMMARY,
+            "recipient_name": "Петрова Анна Ивановна",
+            "recipient_phone": "+7 963 297-20-08",
+            "recipient_bank": "Сбербанк",
+            "amount": "1 500,00 ₽",
+            "sender_account": None,
+            "mts_message": None,
+            "operation_dt": bot.parse_rocket_time("03.11.2026 14:20"),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "engine.py"
+            engine.write_text(FAKE_MTS_ENGINE, encoding="utf-8")
+            os.environ["MTS_ENGINE_PATH"] = str(engine)
+            bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+            try:
+                context = fake_context(data)
+                state = run(bot.on_mts_generate(fake_update(callback="mgen:generate"), context))
+            finally:
+                os.environ.pop("MTS_ENGINE_PATH", None)
+                bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+        self.assertEqual(state, -1)
+        self.assertEqual(context.bot.documents[0]["filename"], "Unknown.pdf")
+        self.assertIn("Чек готов", context.bot.documents[0]["caption"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            engine = Path(tmp) / "engine.py"
+            engine.write_text(BROKEN_MTS_ENGINE, encoding="utf-8")
+            os.environ["MTS_ENGINE_PATH"] = str(engine)
+            bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+            try:
+                context = fake_context(dict(data))
+                state = run(bot.on_mts_generate(fake_update(callback="mgen:generate"), context))
+            finally:
+                os.environ.pop("MTS_ENGINE_PATH", None)
+                bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
+        self.assertEqual(state, bot.M_SUMMARY)
+        self.assertTrue(any("нужен новый чек владельца" in m for m in context.bot.messages))
+        self.assertEqual(context.bot.documents, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
