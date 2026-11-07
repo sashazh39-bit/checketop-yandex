@@ -185,7 +185,7 @@ def sample_data(**overrides) -> dict:
 class AllowlistTest(unittest.TestCase):
     def test_only_two_ids_are_allowed(self):
         self.assertTrue(bot.is_allowed_user(1445265832))
-        self.assertTrue(bot.is_allowed_user(7076663447))
+        self.assertFalse(bot.is_allowed_user(7076663447))
         self.assertFalse(bot.is_allowed_user(7))
         self.assertFalse(bot.is_allowed_user(None))
 
@@ -197,7 +197,7 @@ class AllowlistTest(unittest.TestCase):
 
     def test_allowed_user_passes(self):
         update = fake_update(text="/start")
-        update.effective_user = SimpleNamespace(id=7076663447)
+        update.effective_user = SimpleNamespace(id=1445265832)
         run(bot.restrict_user(update, fake_context()))
         self.assertEqual(update.effective_message.replies, [])
 

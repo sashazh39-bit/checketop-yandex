@@ -84,7 +84,7 @@ logger = logging.getLogger("yandex_bot")
 
 # Бот отвечает только этим Telegram user id. Другие апдейты отсекаются
 # до диалога. Переопределяется переменной ALLOWED_USER_IDS=id1,id2.
-ALLOWED_USER_IDS = {1445265832, 7076663447}
+ALLOWED_USER_IDS = {1445265832}
 
 
 def allowed_user_ids() -> set:
