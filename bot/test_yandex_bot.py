@@ -1022,6 +1022,7 @@ class MtsBotTest(unittest.TestCase):
         self.assertIn("🚀 Рокетбанк", labels)
         self.assertIn("🔵 ВТБ", labels)
         self.assertIn("🟣 ВБ Банк", labels)
+        self.assertIn("🔴 Альфа", labels)
         self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
         self.assertEqual(bot.mts_receipt_filename({}), "Unknown.pdf")
         mts_menu = bot._mts_menu_markup()
@@ -1283,6 +1284,58 @@ def generate_mts_statement(period_start, period_end, issue_date, holder_name,
                 bot._MTS_ENGINE_CACHE.update(path=None, module=None, pool=None)
         self.assertEqual(state, -1)
         self.assertTrue(context.bot.documents)
+
+
+FAKE_ALFA_PATCHER = '''
+from pathlib import Path
+
+def patch_pdf_file(input_path, output_path, amount_from, amount_to, bank="auto"):
+    assert bank == "alfa", bank
+    assert amount_from == 10 and amount_to == 5000, (amount_from, amount_to)
+    assert Path(input_path).is_file()
+    Path(output_path).write_bytes(b"%PDF-1.5 fake-alfa")
+    return True, None
+'''
+
+
+class AlfaBotTest(unittest.TestCase):
+    def test_amount_pair(self):
+        self.assertEqual(bot.parse_alfa_amounts("10 5000"), (10, 5000))
+        self.assertEqual(bot.parse_alfa_amounts("10 5 000"), (10, 5000))
+        with self.assertRaises(ValueError):
+            bot.parse_alfa_amounts("5000")
+
+    def test_upload_then_patch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "in.pdf"
+            source.write_bytes(b"%PDF-1.4\n")
+            engine = Path(tmp) / "pdf_patcher.py"
+            engine.write_text(FAKE_ALFA_PATCHER, encoding="utf-8")
+            os.environ["ALFA_PATCHER_PATH"] = str(engine)
+            bot._ALFA_PATCHER_CACHE.update(path=None, module=None)
+            try:
+                context = fake_context()
+                context.bot.file_source = source
+                state = run(bot.on_alfa_start(fake_update(callback="bank:alfa"), context))
+                self.assertEqual(state, bot.A_UPLOAD)
+                state = run(bot.on_alfa_document(
+                    fake_update(document_name="чек.pdf"), context
+                ))
+                self.assertEqual(state, bot.A_AMOUNT)
+                self.assertTrue(Path(context.user_data["alfa_pdf_path"]).is_file())
+                state = run(bot.on_alfa_amounts(fake_update(text="10 5 000"), context))
+            finally:
+                os.environ.pop("ALFA_PATCHER_PATH", None)
+                bot._ALFA_PATCHER_CACHE.update(path=None, module=None)
+        self.assertEqual(state, -1)
+        self.assertEqual(context.bot.documents[0]["filename"], "чек_5000.pdf")
+        self.assertIn("10 ₽ → 5000 ₽", context.bot.documents[0]["caption"])
+        self.assertNotIn("alfa_pdf_path", context.user_data)
+
+    def test_patcher_module_loads(self):
+        bot._ALFA_PATCHER_CACHE.update(path=None, module=None)
+        module = bot.load_alfa_patcher()
+        self.assertTrue(callable(module.patch_pdf_file))
 
 
 if __name__ == "__main__":

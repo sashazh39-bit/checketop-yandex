@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Telegram-бот checketop — Яндекс, Рокет, МТС, ВТБ, ВБ Банк.
+"""Telegram-бот checketop — Яндекс, Рокет, МТС, ВТБ, ВБ Банк, Альфа.
 
 Бот ведёт пошаговый диалог, собирает данные перевода/выписки и вызывает
 готовые движки. Логики работы с PDF в боте нет: бот только валидирует
@@ -241,6 +241,7 @@ S_CARD = 128
     S_OP_DETAIL,
     S_OP_DELETE,
 ) = range(129, 136)
+A_UPLOAD, A_AMOUNT = range(140, 142)
 M_MEM_RECIPIENT_CB = "mmem:recipient"
 M_GENERATE_CB = "mgen:generate"
 M_EDIT_CB = "mgen:edit"
@@ -355,6 +356,7 @@ ROCKET_MENU_CB = "bank:rocket"
 MTS_CB = "bank:mts"
 VTB_CB = "bank:vtb"
 WB_CB = "bank:wb"
+ALFA_CB = "bank:alfa"
 MAIN_MENU_CB = "menu:main"
 BACK_CB = "nav:back"
 ROCKET_SBP_CB = "rocket:sbp"
@@ -522,6 +524,26 @@ def parse_bank(text: str) -> str:
             "Не понял название банка. Введите, например: Сбербанк"
         )
     return cleaned
+
+
+def parse_alfa_amounts(text: str) -> tuple[int, int]:
+    """``"10 5000"`` или ``"10 5 000"`` -> ``(10, 5000)``.
+
+    Первое число — сумма, которая уже напечатана в загруженном чеке.
+    Остальные цифры склеиваются в новую сумму.
+    """
+    nums = re.findall(r"\d+", text or "")
+    if len(nums) < 2:
+        raise ValueError(
+            "Введите две суммы, например: 10 5000 — сначала та, что в чеке, потом новая."
+        )
+    amount_from = int(nums[0])
+    amount_to = int("".join(nums[1:]))
+    if amount_from <= 0 or amount_to <= 0:
+        raise ValueError("Суммы должны быть больше нуля.")
+    if Decimal(amount_to) > MAX_AMOUNT:
+        raise ValueError("Сумма слишком большая для одного перевода.")
+    return amount_from, amount_to
 
 
 def parse_mts_message(text: str) -> str:
@@ -2162,6 +2184,8 @@ async def _invalid(update: Update, error: ValueError, state: int, context=None) 
             builders = [lambda: _vtb_prompt(context, state)]
         elif scenario == "wb":
             builders = [lambda: _wb_prompt(context, state)]
+        elif scenario == "alfa":
+            builders = [lambda: _alfa_prompt(context, state)]
         for build in builders:
             await _delete_user_message(update, context)
             try:
@@ -2239,6 +2263,7 @@ def _main_menu_markup() -> InlineKeyboardMarkup:
                 _btn("🔴 МТС", MTS_CB),
                 _btn("🔵 ВТБ", VTB_CB),
                 _btn("🟣 ВБ Банк", WB_CB),
+                _btn("🔴 Альфа", ALFA_CB),
             ]
         )
     )
@@ -2979,6 +3004,8 @@ def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
     scenario = data.get("scenario")
     if current in (M_MENU, V_MENU, W_MENU, R_MENU, BANK_SELECT):
         return None
+    if scenario == "alfa":
+        return {A_UPLOAD: None, A_AMOUNT: A_UPLOAD}.get(current)
     if scenario == "mts":
         mapping = {
             M_MENU: None,
@@ -3667,6 +3694,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.callback_query.answer()
     _cleanup_stmt_files(dict(context.user_data))
     _cleanup_yandex_template_files(dict(context.user_data))
+    _cleanup_alfa_upload(dict(context.user_data))
     await _send_tracked_message(update, context, "Отменено. Чтобы начать заново — /start")
     _clear_draft(context)
     return ConversationHandler.END
@@ -5099,6 +5127,13 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         ):
             return await _send_stmt_summary(update, context)
         return await _send_rocket_summary(update, context)
+    if data.get("scenario") == "alfa":
+        target = _back_target(data, current)
+        if target is None:
+            _cleanup_alfa_upload(dict(data))
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        return await _send_alfa_prompt(update, context, target)
     if data.get("scenario") == "yandex_statement":
         target = _back_target(data, current)
         if target is None or target == Y_MENU:
@@ -7772,6 +7807,181 @@ async def on_w_generate(update, context) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Альфа: загрузка PDF и замена суммы
+# ---------------------------------------------------------------------------
+
+
+DEFAULT_ALFA_PATCHER_PATH = REPO_ROOT / "banks" / "alfa" / "pdf_patcher.py"
+_ALFA_PATCHER_CACHE: dict = {"path": None, "module": None}
+
+
+def alfa_patcher_path() -> Path:
+    override = os.environ.get("ALFA_PATCHER_PATH")
+    return Path(override).expanduser() if override else DEFAULT_ALFA_PATCHER_PATH
+
+
+def load_alfa_patcher():
+    """Патчер суммы Альфа-чека. PDF-логики в боте нет."""
+    path = alfa_patcher_path()
+    if _ALFA_PATCHER_CACHE["path"] == path and _ALFA_PATCHER_CACHE["module"] is not None:
+        return _ALFA_PATCHER_CACHE["module"]
+    if not path.is_file():
+        raise FileNotFoundError(f"Патчер Альфы не найден: {path}")
+    folder = str(path.parent)
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    spec = importlib.util.spec_from_file_location("checketop_alfa_patcher", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Не удалось загрузить патчер Альфы из {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["checketop_alfa_patcher"] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "patch_pdf_file", None)):
+        raise AttributeError(f"В {path} нет функции patch_pdf_file(...)")
+    _ALFA_PATCHER_CACHE["path"] = path
+    _ALFA_PATCHER_CACHE["module"] = module
+    return module
+
+
+def _cleanup_alfa_upload(data: dict) -> None:
+    raw = data.get("alfa_pdf_path")
+    if raw:
+        try:
+            Path(str(raw)).unlink(missing_ok=True)
+        except OSError:
+            pass
+    directory = data.get("alfa_pdf_dir")
+    if directory:
+        try:
+            Path(str(directory)).rmdir()
+        except OSError:
+            pass
+
+
+def _alfa_prompt(context, state: int):
+    nav = _nav_row()
+    if state == A_UPLOAD:
+        return (
+            "📄 Пришлите <b>PDF чека Альфа-Банка</b> файлом. "
+            "Поменяю в нём только сумму.",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == A_AMOUNT:
+        return (
+            "💰 <b>Сумма: с какой на какую.</b>\n"
+            "Сначала та, что уже напечатана в чеке, потом новая.\n"
+            "Нажмите, чтобы скопировать: <code>10 5000</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    raise ValueError(f"no alfa prompt for state {state}")
+
+
+async def _send_alfa_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _alfa_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+async def on_alfa_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _cleanup_yandex_template_files(dict(context.user_data))
+    _cleanup_alfa_upload(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "alfa"
+    return await _send_alfa_prompt(update, context, A_UPLOAD)
+
+
+async def on_alfa_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    message = update.effective_message
+    document = getattr(message, "document", None)
+    await _delete_user_message(update, context)
+    name = (getattr(document, "file_name", None) or "")
+    if document is None or not name.lower().endswith(".pdf"):
+        return await _send_alfa_prompt(
+            update, context, A_UPLOAD, prefix="⚠️ Нужен PDF-файл.\n\n"
+        )
+    _cleanup_alfa_upload(dict(context.user_data))
+    directory = Path(tempfile.mkdtemp(prefix="checketop_alfa_"))
+    local_path = directory / "donor.pdf"
+    try:
+        telegram_file = await context.bot.get_file(document.file_id)
+        await telegram_file.download_to_drive(custom_path=str(local_path))
+    except Exception:
+        logger.exception(
+            "Alfa PDF download failed (user_id=%s)",
+            getattr(update.effective_user, "id", "?"),
+        )
+        _cleanup_alfa_upload({"alfa_pdf_path": str(local_path), "alfa_pdf_dir": str(directory)})
+        return await _send_alfa_prompt(
+            update, context, A_UPLOAD, prefix="⚠️ Не получилось прочитать PDF. Пришлите файл ещё раз.\n\n"
+        )
+    context.user_data["alfa_pdf_path"] = str(local_path)
+    context.user_data["alfa_pdf_dir"] = str(directory)
+    context.user_data["alfa_pdf_name"] = Path(name).name
+    return await _send_alfa_prompt(update, context, A_AMOUNT)
+
+
+async def on_alfa_amounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        amount_from, amount_to = parse_alfa_amounts(update.effective_message.text or "")
+    except ValueError as error:
+        return await _invalid(update, error, A_AMOUNT, context)
+    await _delete_user_message(update, context)
+    data = context.user_data
+    source = data.get("alfa_pdf_path")
+    if not source or not Path(str(source)).is_file():
+        return await _send_alfa_prompt(
+            update, context, A_UPLOAD, prefix="⚠️ Чек не найден. Пришлите PDF ещё раз.\n\n"
+        )
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    out_dir = Path(tempfile.mkdtemp(prefix="checketop_alfa_out_"))
+    stem = Path(str(data.get("alfa_pdf_name") or "alfa.pdf")).stem
+    filename = f"{stem}_{amount_to}.pdf"
+    output_path = out_dir / filename
+    await _send_tracked_message(update, context, "⏳ Меняю сумму…")
+    try:
+        module = load_alfa_patcher()
+        ok, err = await asyncio.to_thread(
+            module.patch_pdf_file, source, str(output_path), amount_from, amount_to, "alfa"
+        )
+        if not ok or not output_path.is_file():
+            raise RuntimeError(err or "Сумма в чеке не найдена")
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", ALFA_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        with output_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption=f"✅ Готово: {amount_from} ₽ → {amount_to} ₽",
+                reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "Alfa amount patch failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_alfa_prompt(
+            update, context, A_AMOUNT, prefix=f"Не получилось: {_short_error(error)}\n\n"
+        )
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            out_dir.rmdir()
+        except OSError:
+            pass
+    _cleanup_alfa_upload(dict(context.user_data))
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
 # Сборка приложения
 # ---------------------------------------------------------------------------
 
@@ -7788,6 +7998,7 @@ def build_application(token: str) -> Application:
             CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
             CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
             CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
+            CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
             CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),
             CallbackQueryHandler(on_rocket_card_start, pattern=f"^{ROCKET_CARD_CB}$"),
             CallbackQueryHandler(on_rocket_stmt_start, pattern=f"^{ROCKET_STMT_CB}$"),
@@ -7811,7 +8022,14 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(on_mts_start, pattern=f"^{MTS_CB}$"),
                 CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
                 CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
+                CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
             ],
+            A_UPLOAD: [
+                MessageHandler(filters.Document.ALL, on_alfa_document),
+                MessageHandler(text, on_alfa_document),
+                back,
+            ],
+            A_AMOUNT: [MessageHandler(text, on_alfa_amounts), back],
             M_RECIPIENT_NAME: [
                 MessageHandler(text, on_mts_name),
                 CallbackQueryHandler(on_mts_mem_recipient, pattern=f"^{M_MEM_RECIPIENT_CB}$"),
