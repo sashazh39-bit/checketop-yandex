@@ -17,10 +17,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import yandex_bot as bot  # noqa: E402
 
 
+class FakeFile:
+    def __init__(self, source):
+        self.source = source
+
+    async def download_to_drive(self, custom_path):
+        Path(custom_path).write_bytes(Path(self.source).read_bytes())
+
+
 class FakeBot:
     def __init__(self):
         self.messages = []
         self.documents = []
+        self.file_source = None
         self._next_message_id = 1000
 
     async def send_message(self, chat_id, text, reply_markup=None, parse_mode=None):
@@ -37,6 +46,9 @@ class FakeBot:
 
     async def send_document(self, chat_id, document, filename, caption, reply_markup=None):
         self.documents.append({"filename": filename, "caption": caption})
+
+    async def get_file(self, file_id):
+        return FakeFile(self.file_source)
 
 
 class FakeMessage:
@@ -56,9 +68,12 @@ class FakeQuery:
         pass
 
 
-def fake_update(text=None, callback=None):
+def fake_update(text=None, callback=None, document_name=None):
+    message = FakeMessage(text or "")
+    if document_name is not None:
+        message.document = SimpleNamespace(file_name=document_name, file_id="f")
     return SimpleNamespace(
-        effective_message=FakeMessage(text or ""),
+        effective_message=message,
         callback_query=FakeQuery(callback) if callback else None,
         effective_chat=SimpleNamespace(id=101),
         effective_user=SimpleNamespace(id=7),
@@ -124,6 +139,7 @@ class VtbBotTest(unittest.TestCase):
         self.assertIn("💸 Перевод по СБП", labels)
         self.assertIn("💳 Перевод по карте", labels)
         self.assertIn("📄 Выписка", labels)
+        self.assertIn("📎 Свой PDF", labels)
         self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
         context = fake_context()
         state = run(bot.on_vtb_menu(fake_update(callback="bank:vtb"), context))
@@ -263,6 +279,72 @@ class VtbBotTest(unittest.TestCase):
                 bot._VTB_ENGINE_CACHE.update(path=None, module=None)
         self.assertEqual(state, -1)
         self.assertTrue(context.bot.documents)
+
+
+FAKE_VTB_UPLOAD = '''
+def patch_amount_only(data, pdf_path, amount):
+    assert amount == 1000, amount
+    return b"%PDF-1.4 amount"
+
+def patch_from_values(data, pdf_path, payer=None, recipient=None, account=None,
+                      amount=None, keep_date=False, **kwargs):
+    assert payer == "Евгений Александрович Е.", payer
+    assert recipient is None
+    assert account == "9481", account
+    assert amount is None and keep_date is True
+    return b"%PDF-1.4 patched"
+'''
+
+
+class VtbUploadTest(unittest.TestCase):
+    def test_account_digits(self):
+        self.assertEqual(bot.parse_vtb_account_digits("*9481"), "9481")
+        with self.assertRaises(ValueError):
+            bot.parse_vtb_account_digits("12")
+
+    def test_upload_amount_account_and_payer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "in.pdf"
+            source.write_bytes(b"%PDF-1.4\n")
+            patcher = Path(tmp) / "vtb_patch_from_config.py"
+            patcher.write_text(FAKE_VTB_UPLOAD, encoding="utf-8")
+            os.environ["VTB_UPLOAD_PATCHER_PATH"] = str(patcher)
+            bot._VTB_UPLOAD_CACHE.update(path=None, module=None)
+            try:
+                context = fake_context()
+                context.bot.file_source = source
+                state = run(bot.on_vtb_upload_start(fake_update(callback="vtb:upload"), context))
+                self.assertEqual(state, bot.VU_UPLOAD)
+                state = run(bot.on_vtb_upload_document(
+                    fake_update(document_name="чек.pdf"), context
+                ))
+                self.assertEqual(state, bot.VU_AMOUNT)
+                state = run(bot.on_vtb_upload_amount(fake_update(text="10 1000"), context))
+                self.assertEqual(state, bot.VU_ACCOUNT)
+                state = run(bot.on_vtb_upload_account(fake_update(text="9481"), context))
+                self.assertEqual(state, bot.VU_PAYER)
+                state = run(bot.on_vtb_upload_payer(
+                    fake_update(text="Евгений Александрович Е."), context
+                ))
+                self.assertEqual(state, bot.VU_RECIPIENT)
+                state = run(bot.on_vtb_upload_recipient_keep(
+                    fake_update(callback="vukeep:recipient"), context
+                ))
+            finally:
+                os.environ.pop("VTB_UPLOAD_PATCHER_PATH", None)
+                bot._VTB_UPLOAD_CACHE.update(path=None, module=None)
+        self.assertEqual(state, -1)
+        self.assertEqual(context.bot.documents[0]["filename"], "чек_1000.pdf")
+        caption = context.bot.documents[0]["caption"]
+        self.assertIn("10 ₽ → 1000 ₽", caption)
+        self.assertIn("9481", caption)
+        self.assertIn("Евгений Александрович Е.", caption)
+
+    def test_patcher_module_loads(self):
+        bot._VTB_UPLOAD_CACHE.update(path=None, module=None)
+        module = bot.load_vtb_upload_patcher()
+        self.assertTrue(callable(module.patch_amount_only))
+        self.assertTrue(callable(module.patch_from_values))
 
 
 if __name__ == "__main__":

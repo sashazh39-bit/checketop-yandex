@@ -242,6 +242,7 @@ S_CARD = 128
     S_OP_DELETE,
 ) = range(129, 136)
 A_UPLOAD, A_AMOUNT = range(140, 142)
+VU_UPLOAD, VU_AMOUNT, VU_ACCOUNT, VU_PAYER, VU_RECIPIENT = range(142, 147)
 M_MEM_RECIPIENT_CB = "mmem:recipient"
 M_GENERATE_CB = "mgen:generate"
 M_EDIT_CB = "mgen:edit"
@@ -368,6 +369,7 @@ MTS_STMT_CB = "mts:stmt"
 VTB_SBP_CB = "vtb:sbp"
 VTB_CARD_CB = "vtb:card"
 VTB_STMT_CB = "vtb:stmt"
+VTB_UPLOAD_CB = "vtb:upload"
 WB_SBP_CB = "wb:sbp"
 MC_GENERATE_CB = "mcgen:generate"
 MC_EDIT_CB = "mcgen:edit"
@@ -544,6 +546,16 @@ def parse_alfa_amounts(text: str) -> tuple[int, int]:
     if Decimal(amount_to) > MAX_AMOUNT:
         raise ValueError("Сумма слишком большая для одного перевода.")
     return amount_from, amount_to
+
+
+def parse_vtb_account_digits(text: str) -> str:
+    """Номер счёта ВТБ: последние 4 цифры или длиннее, без звёздочки."""
+    digits = re.sub(r"\D", "", text or "")
+    if not (4 <= len(digits) <= 20):
+        raise ValueError(
+            "Введите номер счёта цифрами. Например последние 4: 9481"
+        )
+    return digits
 
 
 def parse_mts_message(text: str) -> str:
@@ -2186,6 +2198,8 @@ async def _invalid(update: Update, error: ValueError, state: int, context=None) 
             builders = [lambda: _wb_prompt(context, state)]
         elif scenario == "alfa":
             builders = [lambda: _alfa_prompt(context, state)]
+        elif scenario == "vtb_upload":
+            builders = [lambda: _vtb_upload_prompt(context, state)]
         for build in builders:
             await _delete_user_message(update, context)
             try:
@@ -2303,6 +2317,7 @@ def _vtb_menu_markup() -> InlineKeyboardMarkup:
                 _btn("💸 Перевод по СБП", VTB_SBP_CB),
                 _btn("💳 Перевод по карте", VTB_CARD_CB),
                 _btn("📄 Выписка", VTB_STMT_CB),
+                _btn("📎 Свой PDF", VTB_UPLOAD_CB),
                 _btn("🏠 Главное меню", MAIN_MENU_CB),
             ]
         )
@@ -3006,6 +3021,14 @@ def _back_target(data: dict, current: Optional[int]) -> Optional[int]:
         return None
     if scenario == "alfa":
         return {A_UPLOAD: None, A_AMOUNT: A_UPLOAD}.get(current)
+    if scenario == "vtb_upload":
+        return {
+            VU_UPLOAD: V_MENU,
+            VU_AMOUNT: VU_UPLOAD,
+            VU_ACCOUNT: VU_AMOUNT,
+            VU_PAYER: VU_ACCOUNT,
+            VU_RECIPIENT: VU_PAYER,
+        }.get(current)
     if scenario == "mts":
         mapping = {
             M_MENU: None,
@@ -3695,6 +3718,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     _cleanup_stmt_files(dict(context.user_data))
     _cleanup_yandex_template_files(dict(context.user_data))
     _cleanup_alfa_upload(dict(context.user_data))
+    _cleanup_vtb_upload(dict(context.user_data))
     await _send_tracked_message(update, context, "Отменено. Чтобы начать заново — /start")
     _clear_draft(context)
     return ConversationHandler.END
@@ -5177,6 +5201,16 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if target == MC_SUMMARY:
             return await _send_mts_card_summary(update, context)
         return await _send_mts_card_prompt(update, context, target)
+    if data.get("scenario") == "vtb_upload":
+        target = _back_target(data, current)
+        if target is None:
+            _cleanup_vtb_upload(dict(data))
+            _clear_draft(context)
+            return await _send_main_menu(update, context)
+        if target == V_MENU:
+            _cleanup_vtb_upload(dict(data))
+            return await _send_vtb_menu(update, context)
+        return await _send_vtb_upload_prompt(update, context, target)
     if data.get("scenario") in ("vtb_sbp", "vtb_card"):
         target = _back_target(data, current)
         if target is None:
@@ -7982,6 +8016,316 @@ async def on_alfa_amounts(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # ---------------------------------------------------------------------------
+# ВТБ: загруженный PDF — сумма, счёт, ФИО
+# ---------------------------------------------------------------------------
+
+
+DEFAULT_VTB_UPLOAD_PATH = REPO_ROOT / "banks" / "vtb" / "upload" / "vtb_patch_from_config.py"
+_VTB_UPLOAD_CACHE: dict = {"path": None, "module": None}
+
+
+def vtb_upload_patcher_path() -> Path:
+    override = os.environ.get("VTB_UPLOAD_PATCHER_PATH")
+    return Path(override).expanduser() if override else DEFAULT_VTB_UPLOAD_PATH
+
+
+def load_vtb_upload_patcher():
+    """Патчер загруженного чека ВТБ: сумма, счёт, ФИО. PDF-логики в боте нет."""
+    path = vtb_upload_patcher_path()
+    if _VTB_UPLOAD_CACHE["path"] == path and _VTB_UPLOAD_CACHE["module"] is not None:
+        return _VTB_UPLOAD_CACHE["module"]
+    if not path.is_file():
+        raise FileNotFoundError(f"Патчер ВТБ не найден: {path}")
+    folder = str(path.parent)
+    if folder not in sys.path:
+        sys.path.insert(0, folder)
+    spec = importlib.util.spec_from_file_location("checketop_vtb_upload", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Не удалось загрузить патчер ВТБ из {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["checketop_vtb_upload"] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "patch_amount_only", None)):
+        raise AttributeError(f"В {path} нет функции patch_amount_only(...)")
+    if not callable(getattr(module, "patch_from_values", None)):
+        raise AttributeError(f"В {path} нет функции patch_from_values(...)")
+    _VTB_UPLOAD_CACHE["path"] = path
+    _VTB_UPLOAD_CACHE["module"] = module
+    return module
+
+
+def _cleanup_vtb_upload(data: dict) -> None:
+    raw = data.get("vtb_up_path")
+    if raw:
+        try:
+            Path(str(raw)).unlink(missing_ok=True)
+        except OSError:
+            pass
+    directory = data.get("vtb_up_dir")
+    if directory:
+        try:
+            Path(str(directory)).rmdir()
+        except OSError:
+            pass
+
+
+def apply_vtb_upload_patch(
+    source: Path,
+    output_path: Path,
+    amount_from: int,
+    amount_to: int,
+    account: Optional[str],
+    payer: Optional[str],
+    recipient: Optional[str],
+) -> None:
+    """Сначала сумма, затем счёт и ФИО. Дату чека не трогаем."""
+    module = load_vtb_upload_patcher()
+    data = bytearray(source.read_bytes())
+    try:
+        data = bytearray(module.patch_amount_only(data, source, amount_to))
+    except Exception:
+        alfa = load_alfa_patcher()
+        ok, err = alfa.patch_pdf_file(source, output_path, amount_from, amount_to, "vtb")
+        if not ok or not output_path.is_file():
+            raise RuntimeError(err or "Сумма в чеке не найдена")
+        data = bytearray(output_path.read_bytes())
+    if payer or recipient or account:
+        data = module.patch_from_values(
+            data,
+            source,
+            payer=payer,
+            recipient=recipient,
+            account=account,
+            amount=None,
+            keep_date=True,
+        )
+    output_path.write_bytes(bytes(data))
+
+
+def _vtb_upload_prompt(context, state: int):
+    nav = _nav_row()
+    if state == VU_UPLOAD:
+        return (
+            "📄 Пришлите <b>PDF чека ВТБ</b> файлом. "
+            "Можно поменять сумму, номер счёта и ФИО.",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == VU_AMOUNT:
+        return (
+            "💰 <b>Сумма: с какой на какую.</b>\n"
+            "Сначала та, что уже в чеке, потом новая.\n"
+            "Нажмите, чтобы скопировать: <code>10 1000</code>",
+            InlineKeyboardMarkup([nav]),
+        )
+    if state == VU_ACCOUNT:
+        rows = [[_btn("↩️ Оставить свой", "vuacc:keep")], nav]
+        return (
+            "💳 <b>Номер счёта.</b> Последние 4 цифры или длиннее.\n"
+            "Нажмите, чтобы скопировать: <code>9481</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == VU_PAYER:
+        rows = [[_btn("↩️ Оставить", "vukeep:payer")], nav]
+        return (
+            "👤 <b>ФИО плательщика.</b> Или оставьте как в чеке.\n"
+            "Нажмите, чтобы скопировать: <code>Евгений Александрович Е.</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    if state == VU_RECIPIENT:
+        rows = [[_btn("↩️ Оставить", "vukeep:recipient")], nav]
+        return (
+            "👤 <b>ФИО получателя.</b> Или оставьте как в чеке.\n"
+            "Нажмите, чтобы скопировать: <code>Анна Петрова С.</code>",
+            InlineKeyboardMarkup(rows),
+        )
+    raise ValueError(f"no vtb upload prompt for state {state}")
+
+
+async def _send_vtb_upload_prompt(update, context, state: int, prefix: str = "") -> int:
+    context.user_data["current_step"] = state
+    text, markup = _vtb_upload_prompt(context, state)
+    await _send_tracked_message(update, context, f"{prefix}{text}", reply_markup=markup)
+    return state
+
+
+async def on_vtb_upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+    _cleanup_stmt_files(dict(context.user_data))
+    _cleanup_yandex_template_files(dict(context.user_data))
+    _cleanup_alfa_upload(dict(context.user_data))
+    _cleanup_vtb_upload(dict(context.user_data))
+    _clear_draft(context)
+    context.user_data["scenario"] = "vtb_upload"
+    return await _send_vtb_upload_prompt(update, context, VU_UPLOAD)
+
+
+async def on_vtb_upload_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    message = update.effective_message
+    document = getattr(message, "document", None)
+    await _delete_user_message(update, context)
+    name = getattr(document, "file_name", None) or ""
+    if document is None or not name.lower().endswith(".pdf"):
+        return await _send_vtb_upload_prompt(
+            update, context, VU_UPLOAD, prefix="⚠️ Нужен PDF-файл.\n\n"
+        )
+    _cleanup_vtb_upload(dict(context.user_data))
+    directory = Path(tempfile.mkdtemp(prefix="checketop_vtb_up_"))
+    local_path = directory / "donor.pdf"
+    try:
+        telegram_file = await context.bot.get_file(document.file_id)
+        await telegram_file.download_to_drive(custom_path=str(local_path))
+    except Exception:
+        logger.exception(
+            "VTB PDF download failed (user_id=%s)",
+            getattr(update.effective_user, "id", "?"),
+        )
+        _cleanup_vtb_upload({"vtb_up_path": str(local_path), "vtb_up_dir": str(directory)})
+        return await _send_vtb_upload_prompt(
+            update, context, VU_UPLOAD,
+            prefix="⚠️ Не получилось прочитать PDF. Пришлите файл ещё раз.\n\n",
+        )
+    context.user_data["vtb_up_path"] = str(local_path)
+    context.user_data["vtb_up_dir"] = str(directory)
+    context.user_data["vtb_up_name"] = Path(name).name
+    return await _send_vtb_upload_prompt(update, context, VU_AMOUNT)
+
+
+async def on_vtb_upload_amount(update, context) -> int:
+    try:
+        amount_from, amount_to = parse_alfa_amounts(update.effective_message.text or "")
+    except ValueError as error:
+        return await _invalid(update, error, VU_AMOUNT, context)
+    context.user_data["vtb_amount_from"] = amount_from
+    context.user_data["vtb_amount_to"] = amount_to
+    await _delete_user_message(update, context)
+    return await _send_vtb_upload_prompt(update, context, VU_ACCOUNT)
+
+
+async def on_vtb_upload_account_keep(update, context) -> int:
+    await update.callback_query.answer()
+    context.user_data["vtb_account"] = None
+    return await _send_vtb_upload_prompt(update, context, VU_PAYER)
+
+
+async def on_vtb_upload_account(update, context) -> int:
+    try:
+        context.user_data["vtb_account"] = parse_vtb_account_digits(
+            update.effective_message.text or ""
+        )
+    except ValueError as error:
+        return await _invalid(update, error, VU_ACCOUNT, context)
+    await _delete_user_message(update, context)
+    return await _send_vtb_upload_prompt(update, context, VU_PAYER)
+
+
+async def on_vtb_upload_payer_keep(update, context) -> int:
+    await update.callback_query.answer()
+    context.user_data["vtb_payer"] = None
+    return await _send_vtb_upload_prompt(update, context, VU_RECIPIENT)
+
+
+async def on_vtb_upload_payer(update, context) -> int:
+    text = (update.effective_message.text or "").strip()
+    if text in ("-", "оставить", "Оставить"):
+        context.user_data["vtb_payer"] = None
+    else:
+        try:
+            context.user_data["vtb_payer"] = parse_name(text, "ФИО плательщика")
+        except ValueError as error:
+            return await _invalid(update, error, VU_PAYER, context)
+    await _delete_user_message(update, context)
+    return await _send_vtb_upload_prompt(update, context, VU_RECIPIENT)
+
+
+async def on_vtb_upload_recipient_keep(update, context) -> int:
+    await update.callback_query.answer()
+    context.user_data["vtb_recipient"] = None
+    return await _run_vtb_upload(update, context)
+
+
+async def on_vtb_upload_recipient(update, context) -> int:
+    text = (update.effective_message.text or "").strip()
+    if text in ("-", "оставить", "Оставить"):
+        context.user_data["vtb_recipient"] = None
+    else:
+        try:
+            context.user_data["vtb_recipient"] = parse_name(text, "ФИО получателя")
+        except ValueError as error:
+            return await _invalid(update, error, VU_RECIPIENT, context)
+    await _delete_user_message(update, context)
+    return await _run_vtb_upload(update, context)
+
+
+async def _run_vtb_upload(update, context) -> int:
+    data = context.user_data
+    source = data.get("vtb_up_path")
+    if not source or not Path(str(source)).is_file():
+        return await _send_vtb_upload_prompt(
+            update, context, VU_UPLOAD, prefix="⚠️ Чек не найден. Пришлите PDF ещё раз.\n\n"
+        )
+    amount_from = int(data["vtb_amount_from"])
+    amount_to = int(data["vtb_amount_to"])
+    chat_id = update.effective_chat.id
+    user = update.effective_user
+    out_dir = Path(tempfile.mkdtemp(prefix="checketop_vtb_out_"))
+    stem = Path(str(data.get("vtb_up_name") or "vtb.pdf")).stem
+    filename = f"{stem}_{amount_to}.pdf"
+    output_path = out_dir / filename
+    await _send_tracked_message(update, context, "⏳ Меняю чек…")
+    try:
+        await asyncio.to_thread(
+            apply_vtb_upload_patch,
+            Path(str(source)),
+            output_path,
+            amount_from,
+            amount_to,
+            data.get("vtb_account"),
+            data.get("vtb_payer"),
+            data.get("vtb_recipient"),
+        )
+        if not output_path.is_file():
+            raise RuntimeError("Патчер не записал PDF")
+        await _delete_chat_message(
+            context, chat_id, context.user_data.pop("_bot_prompt_id", None)
+        )
+        bits = [f"{amount_from} ₽ → {amount_to} ₽"]
+        if data.get("vtb_account"):
+            bits.append(f"счёт …{data['vtb_account'][-4:]}")
+        if data.get("vtb_payer"):
+            bits.append(f"плательщик {data['vtb_payer']}")
+        if data.get("vtb_recipient"):
+            bits.append(f"получатель {data['vtb_recipient']}")
+        markup = InlineKeyboardMarkup(
+            [[_btn("🔁 Ещё чек", VTB_UPLOAD_CB)], [_btn("🏠 Главное меню", MAIN_MENU_CB)]]
+        )
+        with output_path.open("rb") as handle:
+            await context.bot.send_document(
+                chat_id=chat_id, document=handle, filename=filename,
+                caption="✅ Готово: " + ", ".join(bits),
+                reply_markup=markup,
+            )
+    except Exception as error:
+        logger.exception(
+            "VTB upload patch failed (user_id=%s, chat_id=%s)",
+            getattr(user, "id", "?"), chat_id,
+        )
+        return await _send_vtb_upload_prompt(
+            update, context, VU_RECIPIENT,
+            prefix=f"Не получилось: {_short_error(error)}\n\n",
+        )
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+            out_dir.rmdir()
+        except OSError:
+            pass
+    _cleanup_vtb_upload(dict(context.user_data))
+    _clear_draft(context)
+    return ConversationHandler.END
+
+
+# ---------------------------------------------------------------------------
 # Сборка приложения
 # ---------------------------------------------------------------------------
 
@@ -8008,6 +8352,7 @@ def build_application(token: str) -> Application:
             CallbackQueryHandler(on_vtb_sbp_start, pattern=f"^{VTB_SBP_CB}$"),
             CallbackQueryHandler(on_vtb_card_start, pattern=f"^{VTB_CARD_CB}$"),
             CallbackQueryHandler(on_vtb_stmt_start, pattern=f"^{VTB_STMT_CB}$"),
+            CallbackQueryHandler(on_vtb_upload_start, pattern=f"^{VTB_UPLOAD_CB}$"),
             CallbackQueryHandler(on_wb_sbp_start, pattern=f"^{WB_SBP_CB}$"),
             CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
             CallbackQueryHandler(
@@ -8107,7 +8452,29 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(on_vtb_sbp_start, pattern=f"^{VTB_SBP_CB}$"),
                 CallbackQueryHandler(on_vtb_card_start, pattern=f"^{VTB_CARD_CB}$"),
                 CallbackQueryHandler(on_vtb_stmt_start, pattern=f"^{VTB_STMT_CB}$"),
+                CallbackQueryHandler(on_vtb_upload_start, pattern=f"^{VTB_UPLOAD_CB}$"),
                 CallbackQueryHandler(on_main_menu, pattern=f"^{MAIN_MENU_CB}$"),
+                back,
+            ],
+            VU_UPLOAD: [
+                MessageHandler(filters.Document.ALL, on_vtb_upload_document),
+                MessageHandler(text, on_vtb_upload_document),
+                back,
+            ],
+            VU_AMOUNT: [MessageHandler(text, on_vtb_upload_amount), back],
+            VU_ACCOUNT: [
+                CallbackQueryHandler(on_vtb_upload_account_keep, pattern=r"^vuacc:keep$"),
+                MessageHandler(text, on_vtb_upload_account),
+                back,
+            ],
+            VU_PAYER: [
+                CallbackQueryHandler(on_vtb_upload_payer_keep, pattern=r"^vukeep:payer$"),
+                MessageHandler(text, on_vtb_upload_payer),
+                back,
+            ],
+            VU_RECIPIENT: [
+                CallbackQueryHandler(on_vtb_upload_recipient_keep, pattern=r"^vukeep:recipient$"),
+                MessageHandler(text, on_vtb_upload_recipient),
                 back,
             ],
             V_RECIPIENT_NAME: [
