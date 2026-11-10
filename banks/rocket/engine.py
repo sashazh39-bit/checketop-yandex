@@ -83,11 +83,13 @@ _SBP_ERA_SEGMENTS = ("1004",)
 # Serial era rolls for the whole SBP system, not per bank.  Each row is
 # (from MSK, marker positions 17-18, segment 19-22, tail 23-32), taken
 # from a genuine Rocket receipt of that day.  06.11.2026 donor 47 moved
-# off the 03.11 profile 0B/1004/0011881102 onto 0G/1008/0011890101;
-# keeping the old profile makes the checker reject the operation id.
+# off the 03.11 profile 0B/1004/0011881102 onto 0G/1008/0011890101,
+# then on 10.11 back to marker 0B with tail 0011890301 (donors 57-59).
+# keeping the previous profile makes the checker reject the operation id.
 _SBP_ERAS = (
     (datetime(2026, 11, 3, tzinfo=MSK), "0B", ("1004",), "0011881102"),
     (datetime(2026, 11, 6, tzinfo=MSK), "0G", ("1008",), "0011890101"),
+    (datetime(2026, 11, 10, tzinfo=MSK), "0B", ("1006", "1007", "1011"), "0011890301"),
 )
 _SBP_SEGMENTS = (
     "1004", "1004", "1004", "1004",
@@ -97,7 +99,7 @@ _SBP_SEGMENTS = (
     "1017", "1012", "1020", "1007", "1001", "1014",
 )
 _SBP_TAILS = ("0011860303", "0011870501", "0011880703")
-_DEFAULT_TEMPLATE = "receipt_rocket_47.pdf"  # freshest genuine donor (06.11.2026)
+_DEFAULT_TEMPLATE = "receipt_rocket_59.pdf"  # freshest genuine donor (10.11.2026)
 
 # Card-transfer layout (donors_card/, genuine donors 43-45 of 03.11.2026):
 # freshest template *with* a recipient-bank block and the (only) template

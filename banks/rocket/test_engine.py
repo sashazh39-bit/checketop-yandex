@@ -56,7 +56,7 @@ def info_of(path: Path):
 
 def stage2_roundtrip(cache) -> None:
     print(f"\nStage 2: byte-for-byte round-trip ({len(DONORS)} donors)")
-    check("donors 18-47 present", len(DONORS) == 23, str(len(DONORS)))
+    check("donors 18-59 present", len(DONORS) == 26, str(len(DONORS)))
     for path in DONORS:
         source = path.read_bytes()
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
@@ -240,6 +240,25 @@ def stage5_generate() -> None:
               and f2["amount"] == "500 ₽"
               and f2["account"] == "40817 81045 02313 09876",
               str(f2))
+
+        out3 = Path(td) / "era1011.pdf"
+        engine.generate_rocket(
+            amount="10 ₽",
+            operation_dt=datetime(2026, 11, 10, 22, 10, tzinfo=MSK),
+            sender_name="Жеребятьев Александр Евгеньевич",
+            sender_phone="+7 963 297-20-08",
+            recipient_name="Ян Евгеньевич Ш",
+            recipient_phone="+7 911 857-53-91",
+            recipient_bank="Сбербанк",
+            output_path=out3,
+        )
+        sbp3 = rocket_receipt.Receipt(str(out3)).fields["sbp_id"]
+        check("10.11 SBP era 0B / 1006|1007|1011 / 0011890301",
+              sbp3[16:18] == "0B"
+              and sbp3[18:22] in {"1006", "1007", "1011"}
+              and sbp3[22:] == "0011890301"
+              and sbp3[14] == "0",
+              sbp3)
 
     print("\nRejections")
     with tempfile.TemporaryDirectory() as td:
