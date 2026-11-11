@@ -193,7 +193,7 @@ class AllowlistTest(unittest.TestCase):
         update = fake_update(text="/start")
         with self.assertRaises(bot.ApplicationHandlerStop):
             run(bot.restrict_user(update, fake_context()))
-        self.assertIn("Нет доступа.", update.effective_message.replies)
+        self.assertEqual(update.effective_message.replies, [])
 
     def test_allowed_user_passes(self):
         update = fake_update(text="/start")
@@ -1023,6 +1023,9 @@ class MtsBotTest(unittest.TestCase):
         self.assertIn("🔵 ВТБ", labels)
         self.assertIn("🟣 ВБ Банк", labels)
         self.assertIn("🔴 Альфа", labels)
+        self.assertIn("🌾 Россельхозбанк", labels)
+        self.assertIn("🧾 Озон Банк", labels)
+        self.assertIn("💛 Т-Банк", labels)
         self.assertTrue(all(len(row) <= 2 for row in markup.inline_keyboard))
         self.assertEqual(bot.mts_receipt_filename({}), "Unknown.pdf")
         mts_menu = bot._mts_menu_markup()

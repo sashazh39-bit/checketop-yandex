@@ -2044,6 +2044,13 @@ async def _delete_user_message(update: Update, context) -> None:
     )
 
 
+async def _drop_prompt(update, context) -> None:
+    """Убрать вопрос бота перед отправкой готового PDF."""
+    message_id = context.user_data.pop("_bot_prompt_id", None)
+    if message_id:
+        await _delete_chat_message(context, update.effective_chat.id, message_id)
+
+
 async def _send_tracked_message(update, context, text, reply_markup=None):
     """Показать следующий шаг, отредактировав сообщение бота на месте.
 
@@ -2281,6 +2288,9 @@ def _main_menu_markup() -> InlineKeyboardMarkup:
                 _btn("🔵 ВТБ", VTB_CB),
                 _btn("🟣 ВБ Банк", WB_CB),
                 _btn("🔴 Альфа", ALFA_CB),
+                _btn("🌾 Россельхозбанк", "bank:rshb"),
+                _btn("🧾 Озон Банк", "bank:ozon"),
+                _btn("💛 Т-Банк", "bank:tbank"),
             ]
         )
     )
@@ -5126,6 +5136,11 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if update.callback_query is not None:
         await update.callback_query.answer()
     data = context.user_data
+    if str(data.get("scenario") or "") in (
+        "rshb", "ozon", "ozon_menu", "ozon_edit", "tbank", "tbank_menu", "tbank_edit",
+    ):
+        import extra_banks
+        return await extra_banks.on_back(update, context)
     current = data.get("current_step")
     if current == S_UPLOAD_PENDING:
         pending = data.pop("stmt_pending_receipt_path", None)
@@ -8334,6 +8349,16 @@ async def _run_vtb_upload(update, context) -> int:
 
 
 def build_application(token: str) -> Application:
+    import extra_banks
+    extra_banks.bind(
+        send=_send_tracked_message,
+        delete_user=_delete_user_message,
+        drop_prompt=_drop_prompt,
+        clear=_clear_draft,
+        nav=_nav_row,
+        main=on_main_menu,
+        main_cb=MAIN_MENU_CB,
+    )
     app = Application.builder().token(token).build()
     text = filters.TEXT & ~filters.COMMAND
     back = CallbackQueryHandler(on_nav_back, pattern=f"^{BACK_CB}$")
@@ -8346,6 +8371,7 @@ def build_application(token: str) -> Application:
             CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
             CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
             CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
+            *extra_banks.entry_points(),
             CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),
             CallbackQueryHandler(on_rocket_card_start, pattern=f"^{ROCKET_CARD_CB}$"),
             CallbackQueryHandler(on_rocket_stmt_start, pattern=f"^{ROCKET_STMT_CB}$"),
@@ -8371,6 +8397,7 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(on_vtb_menu, pattern=f"^{VTB_CB}$"),
                 CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
                 CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
+                *extra_banks.menu_handlers(),
             ],
             A_UPLOAD: [
                 MessageHandler(filters.Document.ALL, on_alfa_document),
@@ -8819,6 +8846,7 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(on_edit_field, pattern=r"^edit:[a-z_]+$"),
                 back,
             ],
+            **extra_banks.conversation_states(back),
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
@@ -8898,6 +8926,10 @@ def main() -> int:
         logger.error(message)
         print(message, file=sys.stderr)
         return 2
+    jre_bin = REPO_ROOT / "jre" / "bin" / "java"
+    if jre_bin.exists():
+        os.environ.setdefault("JAVA_BIN", str(jre_bin))
+    os.environ.setdefault("JZCOMP_DIR", str(REPO_ROOT / "banks" / "rshb"))
     logger.info("Starting checketop bot (Yandex + Rocket); errors log: %s", log_file)
     _start_health_server()
     build_application(token).run_polling(allowed_updates=Update.ALL_TYPES)
