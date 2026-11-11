@@ -1333,26 +1333,9 @@ def _is_fresh_donor_refusal(error: BaseException) -> bool:
 
 
 async def generate_pdf(data: dict, output_path: Path) -> Path:
-    """Вызвать движок и вернуть путь к готовому PDF. PDF-логики тут нет."""
-    generate = load_generate_yandex()
-    extra = {}
-    if data.get("yandex_mode") == "template" and data.get("y_template_path"):
-        # Режим «с шаблоном»: чек генерируется именно из квитанции
-        # пользователя; в обычном режиме donor_path не передаётся и
-        # движок сам выбирает донора из пула.
-        extra["donor_path"] = str(data["y_template_path"])
-    result = await asyncio.to_thread(
-        generate,
-        amount=data["amount"],
-        operation_dt=data["operation_dt"],
-        sender_name=data["sender_name"],
-        sender_phone=data["sender_phone"],
-        recipient_name=data["recipient_name"],
-        recipient_phone=data["recipient_phone"],
-        recipient_bank=data["recipient_bank"],
-        output_path=str(output_path),
-        **extra,
-    )
+    """Чек Яндекса — генератор из бота с Яндекс Диска."""
+    import disk_engines
+    result = await asyncio.to_thread(disk_engines.yandex_receipt, data)
     if inspect.isawaitable(result):
         result = await result
 
@@ -1682,23 +1665,11 @@ def mts_glyph_pool(module):
 
 
 async def generate_mts_pdf(data: dict, output_path: Path) -> Path:
-    """Чек МТС: только вызов ``generate_mts``. PDF-логики нет."""
-    module = load_mts_engine()
-    kwargs = dict(
-        amount=data["amount"],
-        operation_dt=data["operation_dt"],
-        recipient_name=data["recipient_name"],
-        recipient_phone=data["recipient_phone"],
-        recipient_bank=data["recipient_bank"],
-        output_path=str(output_path),
-        sender_account=data.get("sender_account"),
-        message=data.get("mts_message"),
-    )
-    pool = mts_glyph_pool(module)
-    if pool is not None:
-        kwargs["pool"] = pool
-    result = await asyncio.to_thread(module.generate_mts, **kwargs)
-    return _ensure_pdf_result(result, output_path, "generate_mts")
+    """Чек МТС СБП — генератор из бота с Яндекс Диска."""
+    import disk_engines
+    pdf = await asyncio.to_thread(disk_engines.mts_sbp, data)
+    output_path.write_bytes(pdf)
+    return output_path
 
 
 async def generate_mts_card_pdf(data: dict, output_path: Path) -> Path:
@@ -1799,21 +1770,11 @@ def load_vtb_operation_from_receipt() -> Callable[..., Any]:
 
 
 async def generate_vtb_pdf(data: dict, output_path: Path) -> Path:
-    module = load_vtb_engine()
-    result = await asyncio.to_thread(
-        module.generate_vtb,
-        amount=data["amount"],
-        operation_dt=data["operation_dt"],
-        sender_name=data["sender_name"],
-        sender_phone=data.get("sender_phone") or "+7 900 000-00-00",
-        recipient_name=data["recipient_name"],
-        recipient_phone=data["recipient_phone"],
-        recipient_bank=data["recipient_bank"],
-        output_path=str(output_path),
-        sender_account=data.get("sender_account"),
-        message=data.get("vtb_message"),
-    )
-    return _ensure_pdf_result(result, output_path, "generate_vtb")
+    """Чек ВТБ СБП — генератор из бота с Яндекс Диска."""
+    import disk_engines
+    pdf = await asyncio.to_thread(disk_engines.vtb_sbp, data)
+    output_path.write_bytes(pdf)
+    return output_path
 
 
 async def generate_vtb_card_pdf(data: dict, output_path: Path) -> Path:
@@ -1896,18 +1857,11 @@ def load_wb_engine():
 
 
 async def generate_wb_pdf(data: dict, output_path: Path) -> Path:
-    """Чек ВБ: только вызов ``generate_wb``. sender_* не передаём."""
-    module = load_wb_engine()
-    result = await asyncio.to_thread(
-        module.generate_wb,
-        amount=data["amount"],
-        operation_dt=data["operation_dt"],
-        recipient_name=data["recipient_name"],
-        recipient_phone=data["recipient_phone"],
-        recipient_bank=data["recipient_bank"],
-        output_path=str(output_path),
-    )
-    return _ensure_pdf_result(result, output_path, "generate_wb")
+    """Чек ВБ СБП — генератор из бота с Яндекс Диска."""
+    import disk_engines
+    pdf = await asyncio.to_thread(disk_engines.wb_sbp, data)
+    output_path.write_bytes(pdf)
+    return output_path
 
 
 def wb_user_error(error: BaseException) -> str:
@@ -2278,22 +2232,26 @@ def _rows(buttons: list, width: int = 2) -> list:
     return [buttons[i : i + width] for i in range(0, len(buttons), width)]
 
 
-def _main_menu_markup() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        _rows(
-            [
-                _btn("🟡 Яндекс чек", YANDEX_CB),
-                _btn("🚀 Рокетбанк", ROCKET_MENU_CB),
-                _btn("🔴 МТС", MTS_CB),
-                _btn("🔵 ВТБ", VTB_CB),
-                _btn("🟣 ВБ Банк", WB_CB),
-                _btn("🔴 Альфа", ALFA_CB),
-                _btn("🌾 Россельхозбанк", "bank:rshb"),
-                _btn("🧾 Озон Банк", "bank:ozon"),
-                _btn("💛 Т-Банк", "bank:tbank"),
-            ]
-        )
+def _main_menu_markup(uid=None) -> InlineKeyboardMarkup:
+    rows = _rows(
+        [
+            _btn("🟡 Яндекс чек", YANDEX_CB),
+            _btn("🚀 Рокетбанк", ROCKET_MENU_CB),
+            _btn("🔴 МТС", MTS_CB),
+            _btn("🔵 ВТБ", VTB_CB),
+            _btn("🟣 ВБ Банк", WB_CB),
+            _btn("🔴 Альфа", ALFA_CB),
+            _btn("🌾 Россельхозбанк", "bank:rshb"),
+            _btn("🧾 Озон Банк", "bank:ozon"),
+            _btn("💛 Т-Банк", "bank:tbank"),
+        ]
     )
+    if uid == 1445265832:
+        rows.append([
+            _btn("👥 Пользователи", "adm:users"),
+            _btn("➕ Создать доступ", "adm:new"),
+        ])
+    return InlineKeyboardMarkup(rows)
 
 
 def _rocket_menu_markup() -> InlineKeyboardMarkup:
@@ -3254,7 +3212,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         update,
         context,
         "Здравствуйте! Сформирую чек перевода или выписку.\nВыберите банк:",
-        reply_markup=_main_menu_markup(),
+        reply_markup=_main_menu_markup(getattr(update.effective_user, "id", None)),
     )
     return BANK_SELECT
 
@@ -5079,7 +5037,7 @@ async def _send_main_menu(update, context) -> int:
     await _send_tracked_message(
         update, context,
         "Здравствуйте! Сформирую чек перевода или выписку.\nВыберите банк:",
-        reply_markup=_main_menu_markup(),
+        reply_markup=_main_menu_markup(getattr(update.effective_user, "id", None)),
     )
     return BANK_SELECT
 
@@ -5141,6 +5099,8 @@ async def on_nav_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     ):
         import extra_banks
         return await extra_banks.on_back(update, context)
+    if data.get("scenario") == "admin_access":
+        return await _send_main_menu(update, context)
     current = data.get("current_step")
     if current == S_UPLOAD_PENDING:
         pending = data.pop("stmt_pending_receipt_path", None)
@@ -8350,6 +8310,7 @@ async def _run_vtb_upload(update, context) -> int:
 
 def build_application(token: str) -> Application:
     import extra_banks
+    import admin_access
     extra_banks.bind(
         send=_send_tracked_message,
         delete_user=_delete_user_message,
@@ -8357,6 +8318,11 @@ def build_application(token: str) -> Application:
         clear=_clear_draft,
         nav=_nav_row,
         main=on_main_menu,
+        main_cb=MAIN_MENU_CB,
+    )
+    admin_access.bind(
+        send=_send_tracked_message,
+        delete_user=_delete_user_message,
         main_cb=MAIN_MENU_CB,
     )
     app = Application.builder().token(token).build()
@@ -8372,6 +8338,7 @@ def build_application(token: str) -> Application:
             CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
             CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
             *extra_banks.entry_points(),
+            *admin_access.menu_handlers(),
             CallbackQueryHandler(on_rocket_sbp_start, pattern=f"^{ROCKET_SBP_CB}$"),
             CallbackQueryHandler(on_rocket_card_start, pattern=f"^{ROCKET_CARD_CB}$"),
             CallbackQueryHandler(on_rocket_stmt_start, pattern=f"^{ROCKET_STMT_CB}$"),
@@ -8398,6 +8365,7 @@ def build_application(token: str) -> Application:
                 CallbackQueryHandler(on_wb_menu, pattern=f"^{WB_CB}$"),
                 CallbackQueryHandler(on_alfa_start, pattern=f"^{ALFA_CB}$"),
                 *extra_banks.menu_handlers(),
+                *admin_access.menu_handlers(),
             ],
             A_UPLOAD: [
                 MessageHandler(filters.Document.ALL, on_alfa_document),
@@ -8847,6 +8815,7 @@ def build_application(token: str) -> Application:
                 back,
             ],
             **extra_banks.conversation_states(back),
+            **admin_access.conversation_states(back),
         },
         fallbacks=[
             CommandHandler("cancel", cancel),
