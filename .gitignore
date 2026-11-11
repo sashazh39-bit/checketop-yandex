@@ -29,6 +29,7 @@ out/
 # Логи и секреты окружения
 logs/
 .env
+bot_access.json
 
 # Системное
 .DS_Store

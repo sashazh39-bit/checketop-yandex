@@ -91,7 +91,13 @@ def allowed_user_ids() -> set:
 
 
 def is_allowed_user(user_id: Optional[int]) -> bool:
-    return user_id in allowed_user_ids()
+    if user_id in allowed_user_ids():
+        return True
+    try:
+        import admin_access
+        return admin_access.has_access(user_id)
+    except Exception:
+        return False
 
 
 async def restrict_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2246,11 +2252,9 @@ def _main_menu_markup(uid=None) -> InlineKeyboardMarkup:
             _btn("💛 Т-Банк", "bank:tbank"),
         ]
     )
+    rows.append([_btn("📂 Другое", "menu_other")])
     if uid == 1445265832:
-        rows.append([
-            _btn("👥 Пользователи", "adm:users"),
-            _btn("➕ Создать доступ", "adm:new"),
-        ])
+        rows.append([_btn("🛠️ Управление", "admin")])
     return InlineKeyboardMarkup(rows)
 
 
