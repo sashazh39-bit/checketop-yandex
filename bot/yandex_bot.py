@@ -95,17 +95,20 @@ def is_allowed_user(user_id: Optional[int]) -> bool:
 
 
 async def restrict_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Пропустить только разрешённые id. Остальным — «Нет доступа» и стоп."""
+    """Пропустить только разрешённые id. Остальным — полная тишина:
+    ни сообщения, ни алерта (только запись в серверный лог)."""
     user = update.effective_user
     if is_allowed_user(getattr(user, "id", None)):
         return
     query = update.callback_query
     if query is not None:
-        await query.answer("Нет доступа.", show_alert=True)
-    elif update.effective_message is not None:
-        await update.effective_message.reply_text("Нет доступа.")
+        # Пустой answer — не сообщение, а только снять «часики» у кнопки.
+        try:
+            await query.answer()
+        except Exception:
+            pass
     logger.info(
-        "Rejected update from user_id=%s",
+        "Silently ignored update from user_id=%s",
         getattr(user, "id", None),
     )
     raise ApplicationHandlerStop
