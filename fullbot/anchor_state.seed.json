@@ -1,0 +1,31 @@
+{
+  "yandex": {
+    "lag_min": 46,
+    "lag_max": 403,
+    "samples": 9
+  },
+  "nspk_current": {
+    "route": "G",
+    "suffix": "0011890701"
+  },
+  "sbp": {
+    "OZON": {
+      "route": "G",
+      "suffix": "0011890701",
+      "nodes": ["7"],
+      "gw_a": ["1004"],
+      "gw_b": [],
+      "flags": ["0"],
+      "samples": 1
+    },
+    "MTS": {
+      "route": "G",
+      "suffix": "0011890701",
+      "nodes": ["6"],
+      "gw_a": ["1002"],
+      "gw_b": [],
+      "flags": ["0"],
+      "samples": 1
+    }
+  }
+}

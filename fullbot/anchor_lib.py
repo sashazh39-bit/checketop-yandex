@@ -181,6 +181,10 @@ def parse_pdf(pdf_bytes: bytes) -> dict:
         # напечатанное на чеке ('дд.мм.гггг чч:мм:сс (UTC+3)').
         m = re.search(r"Код\s+транзакции[\s:：]*(\d{12})", text)
         if m:
+            if not m.group(1).startswith("019"):
+                raise ValueError(
+                    f"код {m.group(1)} из карточной серии (для якоря МТС СБП нужен код 019…)"
+                )
             d = re.search(
                 r"(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})"
                 r"\s*\(UTC\s*\+\s*3\)", text)

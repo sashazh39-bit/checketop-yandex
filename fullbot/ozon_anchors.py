@@ -87,7 +87,7 @@ _MIN_ANCHORS    = 2    # если якорей меньше — чисто fallb
 
 # ──────────────────── разбор op_id ────────────────────
 _OPID_RE = re.compile(
-    r"^([AB])(\d)(\d{3})(\d{6})(\d{3})([0-2])([0-9A-Z])(0)([BG])(\d{4})(\d{10})$"
+    r"^([AB])(\d)(\d{3})(\d{6})(\d{3})([0-2])([0-9A-Z])(0)([A-Z])(\d{4})(\d{10})$"
 )
 
 
@@ -230,18 +230,20 @@ def add_anchor(op_id, id_dt_utc, cd_dt_utc=None, note="", path=None):
     if id_dt.timetuple().tm_yday != fields["doy"]:
         return False, (f"DOY внутри id ({fields['doy']}) "
                        f"≠ id_dt_utc ({id_dt.timetuple().tm_yday})")
-    # согласованность route↔suffix
-    if fields["route"] == "G" and fields["suf"] != _SUF_G:
-        return False, f"route=G, но suffix={fields['suf']!r} (ожидался {_SUF_G})"
-    if fields["route"] == "B" and fields["suf"] != _SUF_B and id_dt >= datetime(2026, 10, 15):
-        # более старые B-suffix (0011870501, 0011870702) встречаются в архиве
-        return False, f"route=B, но suffix={fields['suf']!r} (ожидался {_SUF_B})"
-    # после flip не должны появляться новые B-якоря (attested overlap
-    # закрылся 01:47Z 06.11; после 02:00Z приём B-якорей = ручная ошибка)
-    if (id_dt >= datetime(2026, 11, 6, 2, 0, 0)
-            and fields["route"] != "G"):
-        return False, (f"после 02:00Z 06.11 допустимы только G-якоря; "
-                       f"у этого id route={fields['route']}")
+    # согласованность релиза НСПК (00<sprint:4><sub:01..14><patch:01..03>)
+    suf = fields["suf"]
+    if (len(suf) != 10 or not suf.isdigit() or suf[:2] != "00"
+            or not (1 <= int(suf[6:8]) <= 14) or suf[8:10] not in ("01", "02", "03")):
+        return False, f"некорректный суффикс релиза НСПК: {suf!r}"
+    sprint = int(suf[2:6])
+    if fields["route"] not in ("B", "G"):
+        return False, f"недопустимый route={fields['route']!r}"
+    if id_dt >= datetime(2026, 11, 6, 2, 0, 0) and sprint < 1189:
+        return False, (f"после 02:00Z 06.11 старые якоря спринта <1189 недопустимы; "
+                       f"у этого id {fields['route']}/{suf}")
+    gw_pool = _B_GW_A_POOL if fields["pfx"] == "A" else _B_GW_B_POOL
+    if fields["gw"] not in gw_pool:
+        return False, f"шлюз {fields['gw']} не подходит к префиксу {fields['pfx']}"
     # дубликаты по op_id
     for a in load_anchors(path):
         if a["op_id"] == op_id:
@@ -305,25 +307,68 @@ def pick_op_id(dt_utc: datetime, rng=None, path: str = None) -> str:
     utc = _as_naive_utc(dt_utc)
     g = is_g_era(utc)
     route, suffix = ("G", _SUF_G) if g else ("B", _SUF_B)
+    live_prof = {}
+    if g and path is None:
+        try:
+            import anchor_state as _AS
+            live_prof = _AS.live_sbp_profile("OZON")
+            if live_prof.get("route") in ("B", "G") and live_prof.get("suffix"):
+                route = live_prof["route"]
+                suffix = live_prof["suffix"]
+        except Exception:
+            live_prof = {}
     # ms: 3 цифры, не все одинаковые (как в генераторе — see _ozon_lag_law.py)
     while True:
         ms = r.randint(0, 999)
         if len(set("%03d" % ms)) > 1:
             break
-    anchors = _era_anchors(load_anchors(path), g)
-    if g:
+    all_anchors = load_anchors(path)
+    anchors = _era_anchors(all_anchors, g)
+    if g and route == "B":
+        # Живой подбилд НСПК снова B (напр. B/0011890301 от 10.11): префикс,
+        # узел и шлюз берём из актуальных якорей спринта >= 1189, а не из
+        # G-эры. Флаг у аттестованных B/00118903.. — '0'; шлюз строго по
+        # стороне префикса (A -> A-пул, B -> B-пул).
+        current = [a for a in all_anchors
+                   if a["fields"]["suf"].isdigit() and int(a["fields"]["suf"][2:6]) >= 1189] or anchors
+        pfx = _weighted(_sliding_weights(current, "pfx", _B_PREFIXES), r)
+        if pfx not in ("A", "B"):
+            pfx = "A"
+        flag = "0"
+        cur_nodes = sorted({a["fields"]["node"] for a in current if a["fields"]["node"].isalnum()})
+        node = _weighted(_sliding_weights(current, "node", [(n, 1) for n in cur_nodes] or _G_NODES), r)
+        if cur_nodes and node not in cur_nodes:
+            node = _weighted([(n, 1) for n in cur_nodes], r)
+        if pfx == "A":
+            gw_hist = [(gw_, w) for gw_, w in _sliding_weights(
+                [a for a in current if a["fields"]["pfx"] == "A"], "gw", _G_GW)
+                if gw_ in _B_GW_A_POOL] or list(_G_GW)
+        else:
+            gw_hist = [(gw_, w) for gw_, w in _sliding_weights(
+                [a for a in current if a["fields"]["pfx"] == "B"], "gw", _B_GW_B)
+                if gw_ in _B_GW_B_POOL] or list(_B_GW_B)
+        gw = _weighted(gw_hist, r)
+    elif g:
         pfx = _weighted(_sliding_weights(anchors, "pfx", _G_PREFIXES), r)
         flag = _weighted(_sliding_weights(anchors, "flag", _G_FLAGS), r)
         node = _weighted(_sliding_weights(anchors, "node", _G_NODES), r)
         gw = _weighted(_sliding_weights(anchors, "gw", _G_GW), r)
-        # жёсткие инварианты G-эры
+        # жёсткие инварианты G-эры (но разрешаем реально выученные из свежих якорей
+        # узлы/шлюзы A-стороны, если якорь добавлен через add_anchor)
+        attested_nodes = {"1", "2", "4"} | {a["fields"]["node"] for a in anchors if a["fields"]["node"].isalnum()}
+        attested_nodes |= {n for n in (live_prof.get("nodes") or []) if str(n).isalnum()}
+        attested_gw_a = {"1000", "1004", "1008"} | {
+            a["fields"]["gw"] for a in anchors
+            if a["fields"]["pfx"] == "A" and a["fields"]["gw"] in _B_GW_A_POOL
+        }
+        attested_gw_a |= {gw_ for gw_ in (live_prof.get("gw_a") or []) if gw_ in _B_GW_A_POOL}
         if pfx != "A":
             pfx = "A"
         if flag != "0":
             flag = "0"
-        if node not in {"1", "2", "4"}:
+        if node not in attested_nodes:
             node = _weighted(_G_NODES, r)
-        if gw not in {"1000", "1004", "1008"}:
+        if gw not in attested_gw_a:
             gw = _weighted(_G_GW, r)
     else:
         pfx = _weighted(_sliding_weights(anchors, "pfx", _B_PREFIXES), r)

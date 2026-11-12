@@ -671,10 +671,25 @@ def _make_op_id(dt_msk: datetime) -> str:
     # Gateway pool is era-specific (see _GATEWAYS_*_G): route G draws only
     # from the genuine era-G set, route B keeps the full NSPK old-era pool.
     if route == "G":
-        gw = _rnd.choice(_GATEWAYS_A_G if pfx == "A" else _GATEWAYS_B_G)
+        live = {}
+        try:
+            import anchor_state as _AS
+            live = _AS.live_sbp_profile("WB")
+        except Exception:
+            live = {}
+        if live.get("route") and live.get("suffix") \
+                and live["route"] in CAT["Regular"] \
+                and all(ch in CAT["Regular"] for ch in live["suffix"]):
+            route, suffix = live["route"], live["suffix"]
+        base_gw = _GATEWAYS_A_G if pfx == "A" else _GATEWAYS_B_G
+        live_gw = [g for g in (live.get("gw_a" if pfx == "A" else "gw_b") or [])
+                   if all(ch in CAT["Regular"] for ch in g)]
+        gw = _rnd.choice(sorted(set(base_gw) | set(live_gw)))
+        live_nodes = [n for n in (live.get("nodes") or []) if n in CAT["Regular"]]
+        node = _rnd.choice(sorted(set(_NODES_NEW) | set(live_nodes)))
     else:
         gw = _rnd.choice(_GATEWAYS_A if pfx == "A" else _GATEWAYS_B)
-    node = _rnd.choice(_NODES_NEW if route == "G" else _NODES)
+        node = _rnd.choice(_NODES)
     # New era (route G): flag=0 is accepted by all checkers.
     # Old era (route B): flag=1 appeared ~22% of the time.
     flag = "0" if route == "G" else ("1" if _rnd.random() < 0.22 else "0")

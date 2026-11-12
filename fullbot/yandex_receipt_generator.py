@@ -118,7 +118,7 @@ _GW_A = ("1000", "1001", "1002", "1003", "1004", "1006", "1007", "1008", "1020")
 _GW_B = ("1009", "1010", "1011", "1012", "1013", "1014", "1016", "1017", "1018")
 _NODE_POOL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 _AUTH_POOL = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-_SBP_RE = re.compile(r"^[AB][0-9][0-9]{3}[0-9]{6}[0-9]{3}[0-9][0-9A-Z]0[GB][0-9]{4}[0-9]{10}$")
+_SBP_RE = re.compile(r"^[AB][0-9][0-9]{3}[0-9]{6}[0-9]{3}[0-9][0-9A-Z]0[A-Z][0-9]{4}[0-9]{10}$")
 
 
 # ───────────────────────── Java Deflater (JZComp) ─────────────────────────
@@ -1069,6 +1069,14 @@ def _resolve_flip(era_flip_utc=None) -> datetime:
 
 def _era_route_suffix(op_utc: datetime, era_flip_utc=None):
     if op_utc >= _resolve_flip(era_flip_utc):
+        try:
+            import anchor_state as _AS
+            live = _AS.live_sbp_profile("YANDEX")
+            if live.get("route") and live.get("suffix") \
+                    and not check_text(live["route"] + live["suffix"], "YSText-Regular"):
+                return live["route"], live["suffix"]
+        except Exception:
+            pass
         return "G", "0011890101"
     return "B", "0011881102"
 
@@ -1248,10 +1256,19 @@ def generate(sender=None, sender_phone=None, recipient=None,
     if creation_utc is None:
         creation_utc = datetime.now(_UTC).replace(microsecond=0)
         # Current-era genuine Yandex PDFs are always created after the SBP-ID
-        # instant (08.11 corpus min +46s). Never emit a same-second or earlier
-        # CreationDate for a minute-precision operation.
+        # instant (08.11 corpus min +46s; live lag corridor in anchor_state.json).
+        lag_lo, lag_hi = 60, 420
+        try:
+            import anchor_state as _AS
+            ya_live = (_AS.load_state().get("yandex") or {})
+            if ya_live.get("samples", 0) >= 2:
+                lag_lo = max(60, int(ya_live.get("lag_min", 60)))
+                lag_hi = max(lag_lo + 30, min(660, int(ya_live.get("lag_max", 420))))
+        except Exception:
+            pass
         if creation_utc < sbp_op_utc + timedelta(seconds=60):
-            creation_utc = sbp_op_utc + timedelta(seconds=60 + secrets.randbelow(600))
+            span = max(1, lag_hi - lag_lo + 1)
+            creation_utc = sbp_op_utc + timedelta(seconds=lag_lo + secrets.randbelow(span))
     if creation_utc < sbp_op_utc + timedelta(seconds=60):
         raise ValueError("CreationDate слишком близко к моменту операции в SBP ID (current genuine min +60s)")
     creation_str = _creation_str(creation_utc)

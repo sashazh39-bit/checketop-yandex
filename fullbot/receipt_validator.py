@@ -64,9 +64,69 @@ _ATTESTED_ERA_PAIRS = {
     ("B", "0011750703"), ("G", "0011870501"), ("G", "0011870502"),
     ("B", "0011870702"), ("G", "0011871001"), ("B", "0011880703"),
     ("G", "0011880703"), ("B", "0011881102"), ("G", "0011890101"),
+    ("B", "0011890301"), ("G", "0011890701"),
     ("B", "0011850501"), ("G", "0011770901"),
 }
 _SUFFIX_NEW, _SUFFIX_OLD = "0011890101", "0011881102"
+
+# Hard cutover after which every genuine SBP receipt of the bank uses
+# NSPK sprint >= 1189 (05-06.11.2026 rollout; Ozon's attested B/G overlap
+# closed by 02:00 UTC on 06.11).
+_HARD_1189_FLIP = {
+    "WB":     datetime(2026, 11, 5, 22, 0, 0, tzinfo=UTC),
+    "MTS":    datetime(2026, 11, 6,  3, 0, 0, tzinfo=UTC),
+    "VTB":    datetime(2026, 11, 5, 22, 0, 0, tzinfo=UTC),
+    "OZON":   datetime(2026, 11, 6,  2, 0, 0, tzinfo=UTC),
+    "RSHB":   datetime(2026, 11, 5, 22, 0, 0, tzinfo=UTC),
+    "YANDEX": datetime(2026, 11, 6, 20, 0, 0, tzinfo=UTC),
+}
+_SPRINT_EPOCH = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+
+
+def _is_current_era(parsed: dict | None) -> bool:
+    """True when the SBP op_id belongs to NSPK sprint >= 1189 (Nov 2026+)."""
+    if not parsed:
+        return False
+    suf = parsed.get("suffix") or ""
+    return len(suf) == 10 and suf.isdigit() and int(suf[2:6]) >= 1189
+
+
+def _check_nspk_era(bank: str, parsed: dict) -> tuple[bool, str]:
+    """Validate NSPK route + 10-digit release suffix against the 14.45-day sprint clock.
+
+    NSPK rotates 00<sprint:4><sub:01..14><patch:01..03> every few days across all
+    Russian banks simultaneously (e.g. B/0011881102 -> G/0011890101 -> B/0011890301
+    -> G/0011890701) and increments sprint by 1 every 14.45 days. Checking both
+    the release grammar and the sprint clock accepts all genuine current & future
+    NSPK builds automatically while rejecting stale/invented suffixes.
+    """
+    route, suffix, op_utc = parsed["route"], parsed["suffix"], parsed["op_utc"]
+    if len(suffix) != 10 or not suffix.isdigit() or suffix[:2] != "00":
+        return False, f"invalid NSPK suffix prefix {suffix}"
+    sprint = int(suffix[2:6])
+    sub = int(suffix[6:8])
+    patch = suffix[8:10]
+    if not (1 <= sub <= 14) or patch not in ("01", "02", "03"):
+        return False, f"invalid NSPK suffix release {suffix}"
+    allowed_routes = (
+        ("B", "G")
+        if op_utc >= datetime(2026, 3, 16, tzinfo=UTC)
+        else ("B", "G", "I", "K", "U")
+    )
+    if route not in allowed_routes:
+        return False, f"unexpected NSPK route {route!r} for {op_utc:%Y-%m-%d}"
+    exp_sprint = 1141.5 + (op_utc - _SPRINT_EPOCH).total_seconds() / (86400.0 * 14.45)
+    drift = sprint - exp_sprint
+    if not (-2.3 <= drift <= 2.3):
+        return (
+            False,
+            f"anachronistic NSPK sprint {sprint} ({route}/{suffix}) "
+            f"vs expected ~{exp_sprint:.1f} on {op_utc:%Y-%m-%d}",
+        )
+    hard_flip = _HARD_1189_FLIP.get(bank)
+    if hard_flip and op_utc >= hard_flip and sprint < 1189:
+        return False, f"post-flip {bank} requires sprint >= 1189, found {route}/{suffix}"
+    return True, f"NSPK {route}/{suffix} (sprint {sprint}, exp {exp_sprint:.1f})"
 
 _GW_A = {"1000","1001","1002","1003","1004","1006","1007","1008","1020"}
 _GW_B = {"1009","1010","1011","1012","1013","1014","1016","1017","1018"}
@@ -822,25 +882,12 @@ def validate(pdf_bytes: bytes) -> dict:
            f"time={parsed['hh']:02d}:{parsed['mm']:02d}:{parsed['ss']:02d} "
            f"flag={parsed['flag']} node={parsed['node']} route={parsed['route']} "
            f"gw={parsed['gw']} suffix={parsed['suffix']}")
-        flip = _ERA_FLIP[bank]
-        new_era = parsed["op_utc"] >= flip
-        if bank == "RSHB":
-            ok("opid_era", parsed["route"] == "G" and parsed["suffix"] == _SUFFIX_NEW,
-               f"RSHB always G/{_SUFFIX_NEW}, found {parsed['route']}/{parsed['suffix']}")
-        elif (parsed["route"], parsed["suffix"]) in _ATTESTED_ERA_PAIRS:
-            ok("opid_era", True,
-               f"attested era pair {parsed['route']}/{parsed['suffix']}")
-        elif new_era:
-            ok("opid_era", parsed["route"] == "G" and parsed["suffix"] == _SUFFIX_NEW,
-               f"new era -> G/{_SUFFIX_NEW}, found {parsed['route']}/{parsed['suffix']}")
-        else:
-            # old era: route B; suffix is DOY/bank-specific (0011871001, 0011880703,
-            # 0011881102, ...) - accept any 10-digit suffix with route B.
-            ok("opid_era", parsed["route"] == "B",
-               f"old era -> route B, found {parsed['route']} (suffix {parsed['suffix']})")
+        era_ok, era_detail = _check_nspk_era(bank, parsed)
+        ok("opid_era", era_ok, era_detail)
         ok("opid_flag", parsed["flag"] in _FLAGS[bank],
            f"flag={parsed['flag']!r} valid for {bank}: {sorted(_FLAGS[bank])}")
-        if parsed["suffix"] == _SUFFIX_NEW and bank in _NODES_ERA_G:
+        current_era = _is_current_era(parsed)
+        if current_era and bank in _NODES_ERA_G:
             ok("opid_node", parsed["node"] in _NODES_ERA_G[bank],
                f"node={parsed['node']!r} era-G strict pool for {bank}: "
                f"{sorted(_NODES_ERA_G[bank])}")
@@ -852,7 +899,7 @@ def validate(pdf_bytes: bytes) -> dict:
             # binding, counters and dedup — never on the node alphabet.
             ok("opid_node", parsed["node"].isalnum() and len(parsed["node"]) == 1,
                f"node={parsed['node']!r} (single alnum NSPK node)")
-        if parsed["suffix"] == _SUFFIX_NEW and bank in _GW_ERA_G:
+        if current_era and bank in _GW_ERA_G:
             era_pool = _GW_ERA_G[bank][op_id[0]]
             ok("opid_gateway", parsed["gw"] in era_pool,
                f"gw={parsed['gw']} era-G strict pool for {bank}/{op_id[0]}: "
@@ -862,7 +909,7 @@ def validate(pdf_bytes: bytes) -> dict:
             ok("opid_gateway", parsed["gw"] in gw_pool,
                f"gw={parsed['gw']} for prefix {op_id[0]}")
         ok("opid_tail", parsed["tail"] == "0", f"tail digit = 0, found {parsed['tail']!r}")
-        if parsed["suffix"] == _SUFFIX_NEW and bank in _SHIFT_ERA_G:
+        if current_era and bank in _SHIFT_ERA_G:
             dm = _DATE_RE.search(text or "")
             shift = None
             if dm and dm.group(2).count(":") == 2:
@@ -1025,8 +1072,14 @@ def validate(pdf_bytes: bytes) -> dict:
             amt_op = _labelled_amount_kop("Сумма операции")
             comm = _labelled_amount_kop("Комиссия")
             tot = _labelled_amount_kop("Сумма с комиссией")
-            bm = re.search(r"(?m)^Банк получателя\s*\n\s*([^\n]+)", text)
-            rec_bank = bm.group(1).strip() if bm else ""
+            bm = re.search(
+                r"(?m)^Банк получателя\s*\n\s*(.+?)(?=\n(?:Комиссия|ID операции|Сумма операции)\b)",
+                text, re.S)
+            if bm:
+                rec_bank = " ".join(ln.strip() for ln in bm.group(1).splitlines() if ln.strip())
+            else:
+                bm1 = re.search(r"(?m)^Банк получателя\s*\n\s*([^\n]+)", text)
+                rec_bank = bm1.group(1).strip() if bm1 else ""
             bin_m = re.search(r"(\d{4}) (\d{2})\*{2} \*{4} \d{4}", text)
             bin6 = (bin_m.group(1) + bin_m.group(2)) if bin_m else None
             mapped_bank = _CARD_BIN_BANK.get(bin6 or "")

@@ -28,6 +28,13 @@ if not os.environ.get("JAVA_BIN"):
     os.environ["JAVA_BIN"] = _JRE if os.path.exists(_JRE) else "/usr/bin/java"
 os.environ.setdefault("JZCOMP_DIR", _BASE)
 os.environ.setdefault("MTS_DONOR_SBP", os.path.join(_BASE, "donors", "file25.pdf"))
+os.environ.setdefault("ANCHOR_STATE", os.path.join(_BASE, "anchor_state.json"))
+os.environ.setdefault("CHECKER_ANCHORS_PATH", os.path.join(_BASE, "anchor_state.json"))
+_seed = os.path.join(_BASE, "anchor_state.seed.json")
+_state = os.path.join(_BASE, "anchor_state.json")
+if os.path.isfile(_seed) and not os.path.isfile(_state):
+    import shutil
+    shutil.copyfile(_seed, _state)
 os.environ.setdefault("TEMP", "/tmp")
 if not os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("BOT_TOKEN"):
     os.environ["TELEGRAM_BOT_TOKEN"] = os.environ["BOT_TOKEN"]

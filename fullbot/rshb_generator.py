@@ -312,12 +312,28 @@ def make_op_id(op_dt_msk: datetime, rng: _rnd.Random = None) -> str:
     while len(set(f"{ms:03d}")) == 1:
         ms = r.randint(1, 999)
     flag = "2" if ms >= 947 else ("1" if ms >= 500 else "0")
-    node = r.choice(_NODES)
+    live = {}
+    try:
+        import anchor_state as _AS
+        live = _AS.live_sbp_profile("RSHB")
+    except Exception:
+        live = {}
+    route = live.get("route") or "G"
+    suffix = live.get("suffix") or "0011890101"
+    if check_text(route + suffix, "Regular"):
+        route, suffix = "G", "0011890101"
+    # Only widen the strict RSHB node pool when NSPK moves to a new era
+    # (for G/0011890101 test_receipt_validator asserts the exact 12-node pool).
+    if (route, suffix) != ("G", "0011890101") and live.get("nodes"):
+        live_nodes = [n for n in live["nodes"] if not check_text(n, "Regular")]
+        node = r.choice(sorted(set(_NODES) | set(live_nodes)))
+    else:
+        node = r.choice(_NODES)
     pfx = r.choices(["A", "B"], weights=[57, 43])[0]
     gw = r.choice(_GW_A if pfx == "A" else _GW_B)
     return (pfx + str(utc.year)[-1] + f"{utc.timetuple().tm_yday:03d}"
             + f"{utc.hour:02d}{utc.minute:02d}{utc.second:02d}{ms:03d}"
-            + flag + node + "0G" + gw + "0011890101")
+            + flag + node + "0" + route + gw + suffix)
 
 
 def parse_op_id(op_id: str) -> datetime:

@@ -522,11 +522,29 @@ def make_op_id(op_dt_msk: datetime, rng: _rnd.Random = None,
         pfx = "B" if "B" in allowed_nodes else "A"
     if route == "G":
         flag = "0"
-        nodes = [n for n in _NODES_NEW if allowed_nodes is None or n in allowed_nodes]
-        if not nodes:
-            nodes = _NODES_NEW
-        node = r.choices(nodes, weights=[_NODE_W_NEW[n] for n in nodes])[0]
-        gws = _GW_A_NEW if pfx == "A" else _GW_B_NEW
+        live = {}
+        try:
+            import anchor_state as _AS
+            live = _AS.live_sbp_profile("VTB")
+        except Exception:
+            live = {}
+        if live.get("route") and live.get("suffix") \
+                and (allowed_nodes is None or (
+                    live["route"] in allowed_nodes
+                    and all(ch in allowed_nodes for ch in live["suffix"])
+                )):
+            route, suffix = live["route"], live["suffix"]
+        node_weights = dict(_NODE_W_NEW)
+        for ln in live.get("nodes") or ():
+            if allowed_nodes is None or ln in allowed_nodes:
+                node_weights.setdefault(ln, 1)
+        nodes = [n for n in node_weights if allowed_nodes is None or n in allowed_nodes] or _NODES_NEW
+        node = r.choices(nodes, weights=[node_weights.get(n, 1) for n in nodes])[0]
+        base_gws = dict(_GW_A_NEW if pfx == "A" else _GW_B_NEW)
+        for lg in live.get("gw_a" if pfx == "A" else "gw_b") or ():
+            if allowed_nodes is None or all(ch in allowed_nodes for ch in lg):
+                base_gws.setdefault(lg, 1)
+        gws = list(base_gws.items())
         gw = r.choices([g for g, _ in gws], weights=[w for _, w in gws])[0]
         for _ in range(500):
             ms = r.randint(50, 999)

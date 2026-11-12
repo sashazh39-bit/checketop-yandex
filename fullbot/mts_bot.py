@@ -5063,17 +5063,26 @@ async def cb_admin(cb: CallbackQuery):
            [(u"\U0001f527 Фичи юзеров","users_list")],
            [(u"\U0001f517 Привязки ЛК","a_bind")],
            [(u"\u2693 Якоря номеров","a_anchors")],
+           [(u"\U0001f50d Проверить на актуальность","actuality_wait")],
            [(u"\u2b05 Главная","home")]))
     await cb.answer()
 
-# ── ANCHORS (авто-переякорение WB квитанции № / МТС кода транзакции) ──
+# ── ANCHORS (авто-переякорение всех 6 банков: WB, МТС, Озон, ВТБ, Яндекс, РСХБ) ──
 ANCHOR_PROMPT = (
-    "\U0001f4e5 <b>Обновление якоря</b>\n\n"
-    "Пришли <b>PDF свежего оригинала</b> — чек ВБ (\u00abКвитанция №\u00bb) "
-    "или чек МТС (\u00abКод транзакции\u00bb).\n\n"
-    "Бот сам распознает банк, вытащит номер и время, проверит "
-    "правдоподобие и добавит якорь в ряд. Скорость сразу переоценится "
-    "по последним якорям."
+    "\U0001f4e5 <b>Обновление якоря (все 6 банков)</b>\n\n"
+    "Пришли <b>PDF свежего оригинала</b> любого банка — "
+    "МТС, Wildberries, Озон, ВТБ, Яндекс или РСХБ.\n\n"
+    "Бот сам распознает банк, обновит счётчики МТС/ВБ, пул Озона, "
+    "лаг Яндекса и свежие узлы/шлюзы/эру SBP ID для генераторов и чекера."
+)
+
+ACTUALITY_PROMPT = (
+    "\U0001f50d <b>Проверка шаблона банка на актуальность</b>\n\n"
+    "Пришли <b>свежий оригинальный PDF</b> из приложения любого из 6 банков "
+    "(WB, МТС, ВТБ, РСХБ, Озон, Яндекс).\n\n"
+    "Бот проверит структуру PDF, движок (Producer/Creator), шрифты, размер страницы "
+    "и подписи полей — <b>всё, кроме самого SBP ID</b>. Если банк обновил чек — "
+    "бот напишет точный список отличий."
 )
 
 def _anchor_status() -> str:
@@ -5085,17 +5094,46 @@ def _anchor_status() -> str:
             mark = "№ " if is_wb else ""
             out.append(f"  {a[0]:%d.%m %H:%M:%S} \u2192 {mark}<code>{a[1]}</code>")
         return "\n".join(out)
+    extra = []
+    try:
+        import ozon_anchors as _oa
+        oz_all = _oa.load_anchors()
+        oz_g = [x for x in oz_all if x["fields"]["route"] != "B"]
+        extra.append(f"<b>Озон SBP ID</b> — {len(oz_all)} шт (свежих: {len(oz_g)})")
+    except Exception:
+        pass
+    try:
+        import anchor_state as _as
+        st = _as.load_state()
+        ya = st.get("yandex") or {}
+        if ya:
+            extra.append(
+                f"<b>Яндекс CD-lag</b> — {ya.get('lag_min', '—')}..{ya.get('lag_max', '—')} с "
+                f"({ya.get('samples', 0)} чеков)"
+            )
+        sbp = st.get("sbp") or {}
+        if sbp:
+            parts = []
+            for bk in ("MTS", "WB", "OZON", "VTB", "YANDEX", "RSHB"):
+                if bk in sbp:
+                    p = sbp[bk]
+                    parts.append(f"{bk}: {p.get('route')}/{p.get('suffix')} ({p.get('samples', 0)})")
+            if parts:
+                extra.append("<b>Живые SBP-профили</b>: " + ", ".join(parts))
+    except Exception:
+        pass
+    extra_block = ("\n\n" + "\n".join(extra)) if extra else ""
     return (
-        "\u2693 <b>Якоря номеров</b>\n\n"
+        "\u2693 <b>Якоря всех банков</b>\n\n"
         f"<b>ВБ квитанция №</b> — {len(wa)} шт:\n{fmt(wa, True)}\n"
         f"Скорость сейчас: <b>{wb.current_rate():.2f}/с</b> "
         f"(окно {getattr(wb, '_RATE_WINDOW', 4)})\n\n"
         f"<b>МТС код транзакции</b> — {len(ma)} шт:\n{fmt(ma, False)}\n"
         f"Скорость сейчас: <b>{mts.current_rate():.1f}/с</b> "
-        f"(окно {getattr(mts, '_RATE_WINDOW', 4)})\n\n"
-        "Скорость — медиана наклонов последних сегментов, не константа.\n"
-        "Якоря хранятся в wb_used_no.txt / mts_used_tr.txt (строки «A …», "
-        "история не стирается)."
+        f"(окно {getattr(mts, '_RATE_WINDOW', 5)})"
+        f"{extra_block}\n\n"
+        "Кинь любой свежий оригинал PDF прямо в чат (или нажми «Обновить якорь») — "
+        "профили генераторов и чекера обновятся автоматически."
     )
 
 @router.callback_query(F.data == "a_anchors")
@@ -5113,6 +5151,21 @@ async def cb_anchor_wait(cb: CallbackQuery):
     sessions[uid] = {"step": "anchor_wait", "mid": cb.message.message_id}
     await edit(cb, ANCHOR_PROMPT, kb([(u"\u274c Отмена", "cancel")]), uid)
     await cb.answer()
+
+@router.callback_query(F.data == "actuality_wait")
+async def cb_actuality_wait(cb: CallbackQuery):
+    uid = cb.from_user.id
+    if not is_admin(uid): await cb.answer("Нет"); return
+    sessions[uid] = {"step": "actuality_wait", "mid": cb.message.message_id}
+    await edit(cb, ACTUALITY_PROMPT, kb([(u"\u274c Отмена", "cancel")]), uid)
+    await cb.answer()
+
+@router.message(Command("actuality"))
+async def cmd_actuality(msg: Message):
+    uid = msg.from_user.id
+    if not is_admin(uid): return
+    sessions[uid] = {"step": "actuality_wait"}
+    await edit(msg, ACTUALITY_PROMPT, kb([(u"\u274c Отмена", "cancel")]), uid)
 
 @router.message(Command("anchor"))
 async def cmd_anchor(msg: Message):
@@ -5434,14 +5487,30 @@ def _is_python_zlib(stream_bytes: bytes):
     return False
 
 def _verify_pdf(pdf_bytes: bytes):
-    """Run all checks via receipt_validator.validate() and translate the result
-    into the {bank, label, verdict, findings, info} shape the handler expects.
-    receipt_validator is the standalone 5-bank validator (stdlib + PyMuPDF only,
-    no generator imports). Verdict is binary: 'good' if all checks passed, else
-    'bad' — matches the bot's ✅/❌ reply contract."""
-    import receipt_validator as _rv
+    """Run the shared checker engine and translate the result into the
+    {bank, label, verdict, findings, info} shape the handler expects.
+
+    Единый движок: тот же checker_engine.audit, что и у чекера, и чисто
+    технический вердикт (decide_technical). Если движок недоступен —
+    откат на standalone receipt_validator.validate()."""
     info = _parse_pdf_info(pdf_bytes)  # footer stats (object count, fonts, dates)
     findings = []  # list of (kind, text) — kind: 'ok' | 'bad'
+    try:
+        import checker_engine as _ce
+        audit_res = _ce.audit(pdf_bytes)
+        verdict_obj = _ce.decide_technical(audit_res)
+        bank_up = audit_res.bank
+        bank = bank_up.lower() if bank_up else None
+        label = _BANK_LABEL.get(bank, bank_up or "?")
+        for c in audit_res.checks:
+            kind = "ok" if c["passed"] else "bad"
+            findings.append((kind, f"{c['name']}: {html.escape(str(c['detail'])[:200])}"))
+        return {"bank": bank, "label": label,
+                "verdict": "good" if verdict_obj.kind == "genuine" else "bad",
+                "findings": findings, "info": info}
+    except Exception:
+        logging.exception("checker_engine unavailable in generator bot; fallback to receipt_validator")
+    import receipt_validator as _rv
     try:
         res = _rv.validate(pdf_bytes)
     except Exception as e:
@@ -5650,6 +5719,40 @@ async def handle_doc(msg: Message):
             return
         await _handle_check_pdf(msg, uid)
         return
+    if step == "actuality_wait":
+        if not is_admin(uid):
+            return
+        doc = msg.document
+        fname = (doc.file_name or "").lower()
+        if doc.mime_type != "application/pdf" and not fname.endswith(".pdf"):
+            await msg.answer("\u274c Пришли именно PDF-файл оригинала банка.")
+            return
+        sessions.pop(uid, None)
+        wait_m = await msg.answer("\U0001f50d Сверяю шаблон банка с нашим эталоном...")
+        try:
+            f = await bot.get_file(doc.file_id)
+            buf = io.BytesIO()
+            await bot.download_file(f.file_path, destination=buf)
+            import template_actuality as _ta
+            rep = await asyncio.get_running_loop().run_in_executor(
+                None, _ta.check_actuality, buf.getvalue()
+            )
+            report_text = _ta.render_report_html(rep)
+        except Exception as e:
+            report_text = f"\u274c Ошибка сверки шаблона: <code>{html.escape(str(e))}</code>"
+        try:
+            await wait_m.delete()
+        except Exception:
+            pass
+        await msg.answer(
+            report_text,
+            reply_markup=kb(
+                [(u"\U0001f50d Проверить ещё чек", "actuality_wait")],
+                [(u"\u2b05 Админ", "admin")],
+                [(u"\U0001f3e0 Меню", "home")],
+            ),
+        )
+        return
     if step != "anchor_wait":
         if is_admin(uid) and step is None and await _try_auto_anchor(msg, uid):
             return  # настоящий чек: якоря обновлены автоматически
@@ -5659,7 +5762,7 @@ async def handle_doc(msg: Message):
     doc = msg.document
     fname = (doc.file_name or "").lower()
     if doc.mime_type != "application/pdf" and not fname.endswith(".pdf"):
-        await msg.answer("\u274c Нужен PDF-файл оригинала чека (ВБ или МТС).")
+        await msg.answer("\u274c Нужен PDF-файл оригинала чека.")
         return
     await msg.answer("\u23f3 Парсю оригинал...")
     try:
@@ -5670,49 +5773,40 @@ async def handle_doc(msg: Message):
     except Exception as e:
         await msg.answer(f"\u274c Не скачал файл: <code>{html.escape(str(e))}</code>")
         return
+    sessions.pop(uid, None)
     try:
-        import anchor_lib
-        info = await asyncio.get_running_loop().run_in_executor(
-            None, anchor_lib.parse_pdf, pdf)
+        import anchor_state
+        res = await asyncio.get_running_loop().run_in_executor(
+            None, anchor_state.learn_from_pdf, pdf
+        )
     except Exception as e:
         await msg.answer(
             f"\u274c Не распознал чек: <code>{html.escape(str(e))}</code>\n\n"
-            "Нужен оригинальный PDF чека ВБ (\u00abКвитанция № …\u00bb) "
-            "или МТС (\u00abКод транзакции …\u00bb).")
+            "Пришли оригинальный PDF СБП-чека любого из 6 банков "
+            "(МТС, ВБ, Озон, ВТБ, Яндекс, РСХБ).",
+            reply_markup=kb([(u"\U0001f4e5 Другой PDF", "anchor_wait")],
+                            [(u"\u2693 Все якоря", "a_anchors")],
+                            [(u"\U0001f3e0 Меню", "home")]),
+        )
         return
-    note = f"uid={uid} src=bot"
-    if info["kind"] == "wb":
-        ok, text = wbgen().add_anchor(info["dt"], info["num"], note=note)
-        title = "ВБ квитанция №"
-    else:
-        ok, text = mgen().add_anchor(info["dt"], info["num"], note=note)
-        title = "МТС код транзакции"
-    sessions.pop(uid, None)
-    if ok:
-        try:  # чекер тоже должен видеть свежий якорь (только state, без дубля)
-            import anchor_state
-            anchor_state.learn_from_pdf(pdf, register_generator_anchor=False)
-        except Exception:
-            pass
-        data["logs"].append({"uid": uid, "type": "anchor", "kind": info["kind"],
-                             "num": info["num"],
-                             "time": info["dt"].strftime("%d.%m.%Y %H:%M:%S")})
-        if len(data["logs"]) > 1000: data["logs"] = data["logs"][-1000:]
-        save(data)
+    learned = res.get("learned") or []
+    data["logs"].append({"uid": uid, "type": "anchor", "kind": res.get("kind"),
+                         "num": str(res.get("num") or "")[:32],
+                         "time": datetime.now().strftime("%d.%m.%Y %H:%M:%S")})
+    if len(data["logs"]) > 1000: data["logs"] = data["logs"][-1000:]
+    save(data)
+    if learned:
         await msg.answer(
-            f"\u2693 <b>Якорь обновлён</b> ({title})\n\n"
-            f"\U0001f552 {info['dt']:%d.%m.%Y %H:%M:%S} МСК\n"
-            f"\U0001f522 <code>{info['num']}</code>\n"
-            f"\U0001f4c8 {text}",
+            f"\u2693 <b>Якорь обновлён ({html.escape(str(res.get('kind')))})</b>\n\n"
+            + "\n".join(f"• {html.escape(str(x))}" for x in learned)
+            + "\n\nГенераторы и чекер подхватили свежие значения.",
             reply_markup=kb([(u"\U0001f4e5 Ещё якорь", "anchor_wait")],
                             [(u"\u2693 Все якоря", "a_anchors")],
                             [(u"\U0001f3e0 Меню", "home")]))
     else:
         await msg.answer(
-            f"\u26a0\ufe0f <b>Якорь не принят</b> ({title})\n\n"
-            f"\U0001f552 {info['dt']:%d.%m.%Y %H:%M:%S} МСК\n"
-            f"\U0001f522 <code>{info['num']}</code>\n"
-            f"Причина: {html.escape(text)}",
+            f"\u2693 Чек <b>{html.escape(str(res.get('kind')))}</b> распознан, "
+            "но новых якорей нет (текущие актуальнее или такой чек уже учтён).",
             reply_markup=kb([(u"\U0001f4e5 Другой PDF", "anchor_wait")],
                             [(u"\u2693 Все якоря", "a_anchors")],
                             [(u"\U0001f3e0 Меню", "home")]))

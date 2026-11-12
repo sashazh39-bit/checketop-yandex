@@ -438,6 +438,8 @@ _TR_REFS = [
     # Fresh evening transfers (08.11 23:05/23:07 MSK):
     (datetime(2026, 11, 8, 23, 5, 34), 19597263140),
     (datetime(2026, 11, 8, 23, 7, 46), 19597284220),
+    # Fresh 09.11 night original (Unknown7 (2).pdf, 02:11:47 MSK):
+    (datetime(2026, 11, 9, 2, 11, 47), 19608152840),
 ]
 
 # Genuine segment rates run 304-502/s (night ~150-300/s, daytime ~420-502/s;
@@ -451,9 +453,9 @@ _TR_RATE = 420
 # сохраняются в mts_used_tr.txt помеченными строками
 # "A <дата> <время> <код> # note" (append-only; загрузчик выше их
 # игнорирует благодаря isdigit-фильтру).
-_RATE_WINDOW = 3          # скорость = медиана наклонов по последним N якорям
+_RATE_WINDOW = 5          # скорость = медиана наклонов по последним N якорям
 _RATE_MIN_SPAN = 180.0    # учитываем свежие кластеры от 3 минут (13:16->13:20 = 214с)
-_TR_RATE_MIN, _TR_RATE_MAX = 100.0, 900.0   # правдоподобные наклоны, ед/с
+_TR_RATE_MIN, _TR_RATE_MAX = 80.0, 2500.0   # реальные наклоны (ночной клиринг 08->09.11 = 984.4/с)
 
 try:
     import anchor_lib as _AL
@@ -511,7 +513,7 @@ def _estimate_tr_rate() -> float:
     if _AL is not None:
         r = _AL.estimate_rate(pts, window=_RATE_WINDOW,
                               min_span_s=_RATE_MIN_SPAN,
-                              lo=_TR_RATE_MIN, hi=_TR_RATE_MAX, default=None)
+                              lo=100.0, hi=900.0, default=None)
     else:
         rates = []
         for a, b in zip(pts[-_RATE_WINDOW:], pts[-_RATE_WINDOW:][1:]):
@@ -520,7 +522,7 @@ def _estimate_tr_rate() -> float:
                 rates.append((b[1] - a[1]) / ds)
         if rates:
             rates.sort()
-            r = min(_TR_RATE_MAX, max(_TR_RATE_MIN, rates[len(rates) // 2]))
+            r = min(900.0, max(100.0, rates[len(rates) // 2]))
     return float(r if r is not None else _TR_RATE)
 
 def current_rate() -> float:
@@ -646,8 +648,28 @@ def _sbp_candidates(utc: datetime) -> list:
         yday = st.timetuple().tm_yday
         if st >= _ERA_FLIP_UTC:
             pfx_letter = _rnd.choice("AB")
-            cur_route = "G" + _rnd.choice(_GATEWAYS_NEW[pfx_letter]) + "0011890101"
-            cur_node = _rnd.choice(_NODES_NEW)
+            live = {}
+            try:
+                import anchor_state as _AS
+                live = _AS.live_sbp_profile("MTS")
+            except Exception:
+                live = {}
+            r_let = live.get("route") or "G"
+            r_suf = live.get("suffix") or "0011890101"
+            live_gw = (live.get("gw_a" if pfx_letter == "A" else "gw_b") or [])
+            # Рисуем SBP ID полным каталогом F2 (_full_u2cid), а не донорским
+            # сабсетом: в _base_u2cid нет даже буквы 'G', поэтому проверка по
+            # нему молча сбрасывала любой живой суффикс НСПК (например
+            # 0011890701) обратно на статичный 0011890101.
+            gw_pool = sorted(set(_GATEWAYS_NEW[pfx_letter]) | {
+                g for g in live_gw if all(ch in _full_u2cid for ch in g)
+            })
+            live_nodes = [n for n in (live.get("nodes") or []) if n in _full_u2cid]
+            node_pool = sorted(set(_NODES_NEW) | set(live_nodes))
+            if r_let not in _full_u2cid or not all(ch in _full_u2cid for ch in r_suf):
+                r_let, r_suf = "G", "0011890101"
+            cur_route = r_let + _rnd.choice(gw_pool) + r_suf
+            cur_node = _rnd.choice(node_pool)
             flag = _rnd.choice(("0", "1"))
         else:
             pfx_letter = _sbp_full[0]
