@@ -690,7 +690,7 @@ _BANK_MENU_BUTTONS = {
         [(u"\U0001f9fe Чек СБП", "new_wb")],
     ],
     "vtb": [
-        [(u"\U0001f9fe Чек СБП", "ck_vtb_sbp")],
+        [(u"\U0001f9fe Чек СБП", "new_vtb")],
         [(u"\U0001f4b3 По карте", "new_vtbcard")],
     ],
     "alfa": [

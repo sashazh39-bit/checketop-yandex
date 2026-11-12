@@ -85,9 +85,8 @@ class MenuSmoke(unittest.TestCase):
         expect = {
             "mts": {"new", "new_card", "new_stmt", "home"},
             "wb": {"new_wb", "home"},
-            # merge чекетоп: ВТБ СБП теперь на движке чекетоп (ck_vtb_sbp),
-            # карточный ВТБ — прежний (new_vtbcard)
-            "vtb": {"ck_vtb_sbp", "new_vtbcard", "home"},
+            # ВТБ СБП — генератор с сервера (new_vtb), карта тоже (new_vtbcard)
+            "vtb": {"new_vtb", "new_vtbcard", "home"},
             "alfa": {"ck_alfa_sbp", "home"},
             "tbank": {"ck_tbank_sbp", "home"},
             "rocket": {"rocket:sbp", "rocket:card", "rocket:stmt", "home", "cancel"},

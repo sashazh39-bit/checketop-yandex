@@ -8889,23 +8889,18 @@ def _start_health_server():
 
 
 def main() -> int:
-    log_file = setup_logging()
-    token = os.environ.get("BOT_TOKEN", "").strip()
-    if not token:
-        message = (
-            "BOT_TOKEN не задан. Задайте токен в переменной окружения, "
-            "например: BOT_TOKEN=... python3 bot/yandex_bot.py"
-        )
-        logger.error(message)
-        print(message, file=sys.stderr)
-        return 2
+    """Старт всегда уводит в полный бот с сервера (fullbot), не в чекетоп."""
+    fullbot = REPO_ROOT / "fullbot"
+    runner = fullbot / "run_render.py"
+    if os.environ.get("BOT_TOKEN") and not os.environ.get("TELEGRAM_BOT_TOKEN"):
+        os.environ["TELEGRAM_BOT_TOKEN"] = os.environ["BOT_TOKEN"]
     jre_bin = REPO_ROOT / "jre" / "bin" / "java"
     if jre_bin.exists():
-        os.environ.setdefault("JAVA_BIN", str(jre_bin))
-    os.environ.setdefault("JZCOMP_DIR", str(REPO_ROOT / "banks" / "rshb"))
-    logger.info("Starting checketop bot (Yandex + Rocket); errors log: %s", log_file)
-    _start_health_server()
-    build_application(token).run_polling(allowed_updates=Update.ALL_TYPES)
+        os.environ["JAVA_BIN"] = str(jre_bin)
+    os.environ["JZCOMP_DIR"] = str(fullbot)
+    os.environ["MTS_DONOR_SBP"] = str(fullbot / "donors" / "file25.pdf")
+    os.chdir(fullbot)
+    os.execv(sys.executable, [sys.executable, str(runner)])
     return 0
 
 
