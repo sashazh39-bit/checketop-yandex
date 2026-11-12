@@ -1,0 +1,4 @@
+aiogram>=3.15,<4
+aiohttp>=3.9,<4
+PyMuPDF>=1.23.0
+fonttools>=4.43.0

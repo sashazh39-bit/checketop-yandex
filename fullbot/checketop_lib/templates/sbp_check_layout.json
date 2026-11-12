@@ -1,0 +1,9 @@
+{
+  "donor": "check (1) (1).pdf",
+  "layout": "Исходящий перевод СБП",
+  "fields": {
+    "payer": {"y": 227.25, "ytol": 0.5, "xmin": 100},
+    "recipient": {"y": 203.25, "ytol": 0.5, "xmin": 100},
+    "amount": {"y": 72.37, "ytol": 0.5, "xmin": 100}
+  }
+}

@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.pkl.bak*
+_ozon_quarantine/
+mts_bot_data.json
+anchor_state.json
+mts_used_tr.txt
+used_card_tr.txt
+used_web_tr.txt
+wb_used_no.txt
+*.bak
+*.bak_*
+*.backup-*

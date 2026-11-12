@@ -1,0 +1,77 @@
+{
+  "category": "uzbekistan",
+  "fields": {
+    "date_formed": {
+      "label": "Сформирована",
+      "example": "06.03.2026 01:40 мск",
+      "examples": [
+        "05.03.2026 23:26 мск"
+      ]
+    },
+    "amount_total": {
+      "label": "Сумма списания, включая все комиссии",
+      "example": "10 RUR",
+      "examples": [
+        "15 000 RUR",
+        "1 000 RUR"
+      ]
+    },
+    "amount_credited": {
+      "label": "Сумма зачисления",
+      "example": "1 504,43 UZS",
+      "examples": [
+        "2 256 660 UZS",
+        "150 443 UZS"
+      ]
+    },
+    "course": {
+      "label": "Курс конвертации",
+      "example": "1 UZS = 0.0066137566 RUR"
+    },
+    "date_time": {
+      "label": "Дата и время перевода",
+      "example": "06.03.2026 01:40:13 мск",
+      "examples": [
+        "05.03.2026 23:22:00 мск"
+      ]
+    },
+    "recipient": {
+      "label": "Получатель",
+      "example": "Sirojov M."
+    },
+    "phone": {
+      "label": "Номер телефона получателя",
+      "example": "+998915377732"
+    },
+    "bank": {
+      "label": "Банк получателя",
+      "example": "Агробанк, Узбекистан"
+    },
+    "account": {
+      "label": "Счёт списания",
+      "example": "40817810280480002477"
+    },
+    "operation_id": {
+      "label": "Номер операции в банке",
+      "example": "C600603260001011",
+      "examples": [
+        "C600503260029994",
+        "C600503260029993"
+      ]
+    },
+    "operation_identifier": {
+      "label": "Идентификатор операции",
+      "example": "A6064224020380010000051234567890",
+      "examples": [
+        "A6064202210171010000051234567890"
+      ]
+    }
+  },
+  "format_variants": [],
+  "source_pdfs": [
+    "document06.03.26 00_35_59.632.pdf",
+    "AM_1772742123750_1.pdf",
+    "AM_1772742123750.pdf",
+    "document06.03.26 00_35_59.632_1.pdf"
+  ]
+}

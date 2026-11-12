@@ -1,0 +1,158 @@
+[
+ {
+  "kind": "receipt",
+  "n": 0,
+  "case": "Иван Иванович И. / 470",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "B63110527450050Y0G10170011890101",
+  "md5": "889a80e3b3cc7a40f73ff927730f5ab7"
+ },
+ {
+  "kind": "receipt",
+  "n": 1,
+  "case": "Мария Сергеевна П. / 12,50",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A6311052613347090G10200011890101",
+  "md5": "ddfef5fc91cc3770bd7d51629abc86d5"
+ },
+ {
+  "kind": "receipt",
+  "n": 2,
+  "case": "Пётр Николаевич В. / 1000",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "B63110525248990Q0G10110011890101",
+  "md5": "1edd2d563dba9162a1f5084866b8a76a"
+ },
+ {
+  "kind": "receipt",
+  "n": 3,
+  "case": "Anna Ivanovna S. / 123456.78",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "B6311052428914070G10100011890101",
+  "md5": "06705ede0beea04a43415e85344642af"
+ },
+ {
+  "kind": "receipt",
+  "n": 4,
+  "case": "Роман Андреевич В. / 100",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "B63110523338550S0G10130011890101",
+  "md5": "a12c4273db9db019889298fe2d01a1a0"
+ },
+ {
+  "kind": "receipt",
+  "n": 5,
+  "case": "Артём Ёлкин Ё. / 999",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A63110522203970X0G10080011890101",
+  "md5": "992d71228164b466f8a81b137fc90cd1"
+ },
+ {
+  "kind": "receipt",
+  "n": 6,
+  "case": "Ёлка Ёлочка Ё. / 100000",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A63110521274660A0G10000011890101",
+  "md5": "fca3cc9e87a87cafa7b999862b80d151"
+ },
+ {
+  "kind": "receipt",
+  "n": 7,
+  "case": "Александр Константинович Дли / 1234.56",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A63110520164200G0G10030011890101",
+  "md5": "44e685bfd25672c019420c4cab567262"
+ },
+ {
+  "kind": "receipt",
+  "n": 8,
+  "case": "Объект Ъъ Ъ. / 50",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A63110519593280R0G10060011890101",
+  "md5": "1f898b3ac60a3526292bb7ab02271a36"
+ },
+ {
+  "kind": "receipt",
+  "n": 9,
+  "case": "Никита Валерьевич У. / 10",
+  "verdict": "PASS",
+  "bad": [],
+  "sbp": "A63110518381310C0G10030011890101",
+  "md5": "48e68c802ff8306f2b7b58552e5c6e1f"
+ },
+ {
+  "kind": "statement",
+  "n": 0,
+  "case": "Роман Андреевич В. / 11",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611077445708",
+  "md5": "2bbcd63f17341b7564a04b1c19bc92da",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ },
+ {
+  "kind": "statement",
+  "n": 1,
+  "case": "Артём Ёлкин Ё. / 1234",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611070859705",
+  "md5": "ced4acf323efb6134d779544a6e2c553",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ },
+ {
+  "kind": "statement",
+  "n": 2,
+  "case": "Ёлка Ёлочка Ё. / 100000",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611071886657",
+  "md5": "7a9ae9fe76330fa5de3418c6ebccd2a4",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ },
+ {
+  "kind": "statement",
+  "n": 3,
+  "case": "Александр Константинович Дли / 999",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611078881318",
+  "md5": "5a282dd9a2096ecffab72d904520df6a",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ },
+ {
+  "kind": "statement",
+  "n": 4,
+  "case": "Объект Ъъ Ъ. / 50",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611073454510",
+  "md5": "b83520194f46b1b10dae2aeb9ac3e580",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ },
+ {
+  "kind": "statement",
+  "n": 5,
+  "case": "Мария Сергеевна П. / 123456",
+  "verdict": "PASS",
+  "bad": [],
+  "isx": "202611075530123",
+  "md5": "e8aba2be7c5047ffb015caf28baf8c87",
+  "byte_faithful": false,
+  "engine": "PyMuPDF"
+ }
+]

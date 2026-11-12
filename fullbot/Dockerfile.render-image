@@ -1,0 +1,10 @@
+# Образ для деплоя на Render через реестр (без GitHub).
+# База — локальный prod-образ pdf-service (Python 3.11 + Java 21 + PyMuPDF),
+# т.к. Docker Hub с этой сети недоступен.
+FROM retranslator-mts-pdf-service:latest
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . ./
+ENV PORT=10000 JAVA_BIN=/usr/bin/java JZCOMP_DIR=/app TEMP=/tmp PYTHONUNBUFFERED=1
+CMD ["python3", "run_render.py"]

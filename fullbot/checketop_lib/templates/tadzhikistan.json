@@ -1,0 +1,101 @@
+{
+  "category": "tadzhikistan",
+  "fields": {
+    "date_formed": {
+      "label": "Сформирована",
+      "example": "05.03.2026 21:23 мск",
+      "examples": [
+        "05.03.2026 23:43 мск",
+        "05.03.2026 10:14 мск"
+      ]
+    },
+    "amount": {
+      "label": "Сумма перевода",
+      "example": "10 RUR",
+      "examples": [
+        "1 000 RUR",
+        "30 000 RUR"
+      ]
+    },
+    "commission": {
+      "label": "Комиссия",
+      "example": "0 RUR",
+      "examples": [
+        "30 RUR",
+        "39 RUR"
+      ]
+    },
+    "course": {
+      "label": "Курс конвертации",
+      "example": "1 RUR = 0.1180 TJS",
+      "examples": [
+        "1 RUR = 0.121 TJS",
+        "1 RUR = 0.122 TJS"
+      ]
+    },
+    "amount_credited": {
+      "label": "Сумма зачисления банком получателя",
+      "example": "1,18 TJS",
+      "examples": [
+        "1,21 TJS",
+        "118 TJS"
+      ]
+    },
+    "date_time": {
+      "label": "Дата и время перевода",
+      "example": "05.03.2026 21:23:22 мск",
+      "examples": [
+        "05.03.2026 23:43:23 мск",
+        "13.02.2026 19:51:08 мск"
+      ]
+    },
+    "recipient": {
+      "label": "Получатель",
+      "example": "E. J.",
+      "examples": [
+        "Зафари Н.",
+        "Равшанович С."
+      ]
+    },
+    "phone": {
+      "label": "Номер телефона получателя",
+      "example": "+992977954334",
+      "examples": [
+        "+992929900515",
+        "+992921171936"
+      ]
+    },
+    "account": {
+      "label": "Счёт списания",
+      "example": "40817810980480002476",
+      "examples": [
+        "40817810280480002477",
+        "40817810980480003096"
+      ]
+    },
+    "operation_id": {
+      "label": "Номер операции в банке",
+      "example": "C820503260091425",
+      "examples": [
+        "C820503260106215",
+        "C821302260067521"
+      ]
+    },
+    "amount_with_commission": {
+      "label": "Списано с учётом комиссии",
+      "example": "40 RUR",
+      "examples": [
+        "2 039 RUR",
+        "3 059 RUR"
+      ]
+    }
+  },
+  "format_variants": [],
+  "source_pdfs": [
+    "document05.03.26 20_19_07.678.pdf",
+    "document05.03.26 22_39_03.672.pdf",
+    "AM_1772694576533_extended.pdf",
+    "document05.03.26 20_57_31.436.pdf",
+    "AM_1772692201985.pdf"
+  ]
+}
