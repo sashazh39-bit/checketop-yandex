@@ -16,14 +16,34 @@ F16 = r"C:\Users\nemor\OneDrive\Desktop\mtsdonornew\file (16).pdf"
 F17 = r"C:\Users\nemor\OneDrive\Desktop\mtsdonornew\file (17).pdf"
 OUTDIR = r"C:\Users\nemor\OneDrive\Desktop\mts_check_15"
 OUT = os.path.join(OUTDIR, "receipt_8947.pdf")
+def _is_java(path):
+    return bool(path) and os.path.isfile(path) and os.access(path, os.X_OK)
+
+
 def _find_java():
-    """Java executable: JAVA_BIN env, known local JDK17, then PATH."""
+    """Java executable: live JAVA_BIN, bundled JRE, PATH. Skip missing paths."""
     import shutil
-    for j in (os.environ.get("JAVA_BIN"),
-              r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
-              shutil.which("java")):
-        if j and (os.path.exists(j) or shutil.which(j)):
-            return j
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo = os.path.dirname(here)
+    cands = [
+        os.environ.get("JAVA_BIN"),
+        os.path.join(repo, "jre", "bin", "java"),
+        os.path.join(here, "jre", "bin", "java"),
+        shutil.which("java"),
+        "/usr/bin/java",
+        "/opt/homebrew/opt/openjdk@17/bin/java",
+        r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
+    ]
+    seen = set()
+    for j in cands:
+        if not j:
+            continue
+        path = os.path.realpath(j)
+        if path in seen:
+            continue
+        seen.add(path)
+        if _is_java(path):
+            return path
     return None
 
 def _find_jzdir():
@@ -43,9 +63,18 @@ def _find_jzdir():
             return d
     return None
 
-JAVA = _find_java()
+JAVA = None
 TMP = os.environ.get("TEMP") or os.environ.get("TMPDIR") or "/tmp"
 _JZDIR = _find_jzdir()
+
+
+def _java_bin():
+    """Поздний поиск: JRE может появиться уже после импорта модуля."""
+    global JAVA
+    if _is_java(JAVA):
+        return JAVA
+    JAVA = _find_java()
+    return JAVA
 
 # ───────────── persistent JZCompServer (same bytes, no per-call JVM spawn) ─────────────
 # Every deflate here must come out of java.util.zip.Deflater.  Starting a JVM
@@ -71,8 +100,9 @@ def _read_exact(fh, n):
 def _find_javac():
     """javac for auto-building JZCompServer.class: JAVA_BIN sibling, then PATH."""
     import shutil
-    if JAVA:
-        sib = os.path.join(os.path.dirname(JAVA), "javac.exe" if JAVA.lower().endswith(".exe") else "javac")
+    java = _java_bin()
+    if java:
+        sib = os.path.join(os.path.dirname(java), "javac.exe" if java.lower().endswith(".exe") else "javac")
         if os.path.exists(sib):
             return sib
     return shutil.which("javac")
@@ -94,7 +124,10 @@ def _ensure_server_class(jzdir):
     return os.path.exists(cls)
 
 def _jz_server_start(jzdir):
-    proc = subprocess.Popen([JAVA, "-cp", jzdir, "JZCompServer"],
+    java = _java_bin()
+    if not java:
+        raise RuntimeError("java executable not found for server mode")
+    proc = subprocess.Popen([java, "-cp", jzdir, "JZCompServer"],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL)
     try:
@@ -112,7 +145,7 @@ def _jcomp_via_server(data, level=6):
     jzdir = _JZDIR or _find_jzdir()
     if jzdir is None:
         raise RuntimeError("JZComp.class not found for server mode")
-    if JAVA is None:
+    if _java_bin() is None:
         raise RuntimeError("java executable not found for server mode")
     if not _ensure_server_class(jzdir):
         raise RuntimeError("JZCompServer.class unavailable")
@@ -148,7 +181,8 @@ def jcomp(data, tag="tmp"):
             "JZComp.class not found (searched JZCOMP_DIR, script dir, cwd, "
             "wb_project/, retranslator-mts/pdf-service/, /opt/mts-bot, TMP); "
             "Java Deflater is mandatory, no zlib fallback")
-    if JAVA is None:
+    java = _java_bin()
+    if java is None:
         raise RuntimeError("java executable not found (set JAVA_BIN); "
                            "Java Deflater is mandatory, no zlib fallback")
     import uuid
@@ -157,7 +191,7 @@ def jcomp(data, tag="tmp"):
     out = os.path.join(TMP, f"c15_{tag}_{suf}_out.bin")
     try:
         open(inn, "wb").write(data)
-        subprocess.check_call([JAVA, "-cp", jzdir, "JZComp", inn, out], stdout=subprocess.DEVNULL)
+        subprocess.check_call([java, "-cp", jzdir, "JZComp", inn, out], stdout=subprocess.DEVNULL)
         return open(out, "rb").read()
     finally:
         for p in (inn, out):

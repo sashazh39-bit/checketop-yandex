@@ -62,8 +62,9 @@ def _java_deflate(data: bytes) -> bytes:
         raise RuntimeError("JZComp.class not found")
     javas = [os.environ.get("JAVA_BIN"),
              r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
-             shutil.which("java")]
-    java = next((j for j in javas if j and (os.path.exists(j) or shutil.which(j))), None)
+             shutil.which("java"),
+             os.path.join(os.path.dirname(_DIR), "jre", "bin", "java")]
+    java = next((j for j in javas if j and os.path.isfile(j) and os.access(j, os.X_OK)), None)
     if java is None:
         raise RuntimeError("java not found")
     suf = uuid.uuid4().hex[:12]
@@ -107,8 +108,9 @@ def _jzfs_dirs():
 def _jzfs_java():
     for j in (os.environ.get("JAVA_BIN"),
               r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
-              _shutil.which("java")):
-        if j and (os.path.exists(j) or _shutil.which(j)):
+              _shutil.which("java"),
+              os.path.join(os.path.dirname(_DIR), "jre", "bin", "java")):
+        if j and os.path.isfile(j) and os.access(j, os.X_OK):
             return j
     return None
 

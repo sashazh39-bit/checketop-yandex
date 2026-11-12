@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt && python3 scripts/ensure_jre.py
-    startCommand: PATH=$PWD/bin:$PWD/jre/bin:$PATH JAVA_BIN=$PWD/jre/bin/java JZCOMP_DIR=$PWD/fullbot MTS_DONOR_SBP=$PWD/fullbot/donors/file25.pdf python3 fullbot/run_render.py
+    startCommand: PATH=$PWD/bin:$PWD/jre/bin:$PATH JZCOMP_DIR=$PWD/fullbot MTS_DONOR_SBP=$PWD/fullbot/donors/file25.pdf python3 fullbot/run_render.py
     healthCheckPath: /
     envVars:
       - key: BOT_TOKEN

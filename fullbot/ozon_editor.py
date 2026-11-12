@@ -100,8 +100,9 @@ def _find_jzcomp_dir():
 def _find_java():
     for j in (os.environ.get("JAVA_BIN"),
               r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
-              shutil.which("java")):
-        if j and (os.path.exists(j) or shutil.which(j)):
+              shutil.which("java"),
+              os.path.join(os.path.dirname(_EDITOR_DIR), "jre", "bin", "java")):
+        if j and os.path.isfile(j) and os.access(j, os.X_OK):
             return j
     return None
 

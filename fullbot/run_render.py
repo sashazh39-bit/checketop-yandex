@@ -17,15 +17,14 @@ import sys
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # checketop_lib нужен адаптеру уже к моменту импорта mts_bot
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "checketop_lib"))
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
-_JRE = os.path.join(os.path.dirname(_BASE), "jre", "bin", "java")
-if not os.environ.get("JAVA_BIN"):
-    os.environ["JAVA_BIN"] = _JRE if os.path.exists(_JRE) else "/usr/bin/java"
+_REPO = os.path.dirname(_BASE)
 os.environ.setdefault("JZCOMP_DIR", _BASE)
 os.environ.setdefault("MTS_DONOR_SBP", os.path.join(_BASE, "donors", "file25.pdf"))
 os.environ.setdefault("ANCHOR_STATE", os.path.join(_BASE, "anchor_state.json"))
@@ -38,6 +37,27 @@ if os.path.isfile(_seed) and not os.path.isfile(_state):
 os.environ.setdefault("TEMP", "/tmp")
 if not os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("BOT_TOKEN"):
     os.environ["TELEGRAM_BOT_TOKEN"] = os.environ["BOT_TOKEN"]
+
+
+def _bind_java() -> str | None:
+    """Найти java или скачать JRE до импорта генераторов.
+
+    Render startCommand часто ставит JAVA_BIN=$PWD/jre/bin/java, хотя
+    файла ещё нет. Не оставляем этот путь — JZComp иначе падает с
+    «java executable not found».
+    """
+    scripts = os.path.join(_REPO, "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import ensure_jre
+    except Exception as exc:  # noqa: BLE001
+        print("ensure_jre import failed:", exc, flush=True)
+        return None
+    java = ensure_jre.ensure_java(Path(_REPO))
+    ensure_jre.bind_env(java)
+    print("JAVA_BIN", os.environ.get("JAVA_BIN") or "(unset)", flush=True)
+    return java
 
 PORT = int(os.environ.get("PORT", 10000))
 _STARTED = time.time()
@@ -54,7 +74,8 @@ class HealthHandler(BaseHTTPRequestHandler):
                 "last_error": _STATE["last_error"],
             }
             body = json.dumps(payload).encode()
-            self.send_response(200 if _STATE["bot_alive"] else 503)
+            # 200 и на starting: иначе Render убивает сервис, пока качается JRE.
+            self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -87,6 +108,9 @@ def _ensure_packages() -> None:
 def main() -> None:
     _ensure_packages()
     threading.Thread(target=_serve, daemon=True).start()
+    java = _bind_java()
+    if not java:
+        print("WARNING: java not found; WB/RSHB/Ozon/Yandex PDF deflate will fail", flush=True)
     import mts_bot
 
     orig_main = mts_bot.main

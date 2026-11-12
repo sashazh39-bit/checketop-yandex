@@ -35,3 +35,6 @@ bot_access.json
 
 # Системное
 .DS_Store
+
+# Temurin JRE, скачивается на Render при старте
+/jre/

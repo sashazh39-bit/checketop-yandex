@@ -128,12 +128,14 @@ _JZ_DIR = None
 
 
 def _find_java():
+    here = os.path.dirname(os.path.abspath(__file__))
     for cand in (os.environ.get("JAVA_BIN"),
                  r"C:\Users\nemor\AppData\Local\Programs\Microsoft\jdk-17.0.17.10-hotspot\bin\java.exe",
                  shutil.which("java"),
                  r"C:\Program Files (x86)\Common Files\Oracle\Java\java8path\java.exe",
+                 os.path.join(os.path.dirname(here), "jre", "bin", "java"),
                  "/usr/bin/java"):
-        if cand and (os.path.exists(cand) or shutil.which(str(cand))):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     return None
 
