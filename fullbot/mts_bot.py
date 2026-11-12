@@ -5566,8 +5566,13 @@ async def _handle_check_pdf(msg: Message, uid):
         return
     await msg.answer("\u23f3 Проверяю чек\u2026")
     try:
-        res = await asyncio.get_running_loop().run_in_executor(
-            None, _verify_pdf, pdf)
+        res = await asyncio.wait_for(
+            asyncio.get_running_loop().run_in_executor(None, _verify_pdf, pdf),
+            timeout=180,
+        )
+    except asyncio.TimeoutError:
+        await msg.answer("\u274c Проверка зависла на этом PDF (больше 3 минут). Пришлите чек ещё раз.")
+        return
     except Exception as e:
         await msg.answer(
             f"\u274c Ошибка проверки: <code>{html.escape(str(e)[:200])}</code>")
@@ -5700,6 +5705,11 @@ async def handle_doc(msg: Message):
     uid = msg.from_user.id
     s = sessions.get(uid) or {}
     step = s.get("step")
+    if step == "rk2s_upload":
+        # Чеки для выписки Рокета: иначе этот ранний handler съедает документ
+        # и rk2_handle_document ниже по файлу никогда не вызывается.
+        await rk2_handle_document(msg)
+        return
     if step == "ozon_edit_flow":
         if not is_ok(uid):
             return
