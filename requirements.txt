@@ -1,2 +1,5 @@
 python-telegram-bot>=22,<23
 fonttools>=4,<5
+aiogram>=3.15,<4
+aiohttp>=3.9,<4
+PyMuPDF>=1.23.0

@@ -8,6 +8,8 @@ __pycache__/
 !banks/rshb/*.pkl
 !banks/ozon/*.pkl
 !banks/disk/*.pkl
+!fullbot/*.pkl
+!fullbot/**/*.pkl
 
 # Результаты генераций (любой out/ в проекте)
 out/
